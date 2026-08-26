@@ -1,0 +1,2090 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>MapOrb — Free Navigation</title>
+<meta name="description" content="Free, keyless navigation with routing, live tracking, and distance measurement.">
+<meta name="theme-color" content="#175ac9">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="icons/icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="MapOrb">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
+<style>
+:root{
+  --bg:#12141a; --surface:#1c1f27; --surface2:#252934; --text:#eef0f4; --muted:#9aa2b1;
+  --accent:#4f8cff; --border:#2e3340; --danger:#ff5a5a;
+}
+[data-theme="light"]{
+  --bg:#f4f6f9; --surface:#ffffff; --surface2:#eef1f6; --text:#161a22; --muted:#5c6470;
+  --accent:#2f6fed; --border:#dde2ea; --danger:#d63b3b;
+}
+[data-theme="oled"]{
+  --bg:#000000; --surface:#0a0a0a; --surface2:#141414; --text:#f2f2f2; --muted:#8a8a8a;
+  --accent:#4f8cff; --border:#1f1f1f; --danger:#ff5a5a;
+}
+[data-theme="hc"]{
+  --bg:#000000; --surface:#000000; --surface2:#000000; --text:#ffffff; --muted:#ffffff;
+  --accent:#ffff00; --border:#ffffff; --danger:#ff6b6b;
+}
+*{box-sizing:border-box;}
+html,body{height:100%;margin:0;}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  background:var(--bg); color:var(--text);
+  display:flex; flex-direction:column; align-items:center;
+  transition:background .2s,color .2s;
+}
+.app{ width:100%; max-width:480px; min-height:100vh; display:flex; flex-direction:column; background:var(--bg); }
+header{ padding:12px 14px 8px; display:flex; align-items:center; justify-content:space-between; gap:8px; }
+header h1{font-size:1.05rem; margin:0; letter-spacing:.2px;}
+.theme-toggle{display:flex; gap:4px; background:var(--surface2); border:1px solid var(--border); border-radius:10px; padding:3px;}
+.theme-toggle button{
+  border:none; background:transparent; color:var(--muted); font-size:.65rem; font-weight:600;
+  padding:6px 7px; border-radius:7px; cursor:pointer;
+}
+.theme-toggle button.active{background:var(--accent); color:#fff;}
+[data-theme="hc"] .theme-toggle button.active{color:#000;}
+
+.controls{padding:0 14px 8px; display:flex; flex-direction:column; gap:6px;}
+.field-row{display:flex; gap:6px;}
+input[type="text"]{
+  flex:1; padding:11px 12px; border-radius:10px; border:1px solid var(--border);
+  background:var(--surface); color:var(--text); font-size:.9rem; outline:none;
+}
+input[type="text"]:focus{border-color:var(--accent);}
+button.btn{
+  border:none; border-radius:10px; padding:11px 14px; font-size:.85rem; font-weight:600;
+  cursor:pointer; background:var(--accent); color:#fff; white-space:nowrap;
+}
+[data-theme="hc"] button.btn{color:#000;}
+button.icon-btn{
+  border:1px solid var(--border); background:var(--surface); color:var(--text);
+  border-radius:10px; padding:11px 12px; cursor:pointer; font-size:.9rem;
+}
+button.icon-btn.active{background:var(--accent); color:#fff; border-color:var(--accent);}
+[data-theme="hc"] button.icon-btn.active{color:#000;}
+.grow{flex:1;}
+#map.measuring, #map.tapping{cursor:crosshair;}
+#map{position:relative;}
+
+.suggestions{
+  background:var(--surface); border:1px solid var(--border); border-radius:10px;
+  max-height:170px; overflow-y:auto; display:none;
+}
+.suggestions div{padding:9px 12px; font-size:.82rem; border-bottom:1px solid var(--border); cursor:pointer;}
+.suggestions div:last-child{border-bottom:none;}
+.suggestions div:hover{background:var(--surface2);}
+.suggestions .tag{font-size:.65rem; color:var(--accent); font-weight:700; margin-right:4px;}
+
+.chips{display:flex; gap:6px; overflow-x:auto; padding:2px 0; display:none;}
+.chips.show{display:flex;}
+.chip{
+  display:flex; align-items:center; gap:5px; background:var(--surface); border:1px solid var(--border);
+  border-radius:20px; padding:6px 10px; font-size:.75rem; white-space:nowrap; cursor:pointer; flex-shrink:0;
+}
+.chip.active{background:var(--accent); color:#fff; border-color:var(--accent);}
+[data-theme="hc"] .chip.active{color:#000;}
+.chip .x{color:var(--muted); font-weight:700; cursor:pointer;}
+
+.toolbar{display:flex; gap:5px; overflow-x:auto; padding:3px 0 5px; scrollbar-width:thin;}
+.toolbar button.icon-btn, .toolbar label.icon-btn{
+  flex-shrink:0; padding:7px 6px 6px; font-size:1rem; min-width:50px; text-align:center;
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; cursor:pointer;
+}
+.toolbar .tbl{font-size:.53rem; font-weight:600; color:var(--muted); line-height:1; white-space:nowrap;}
+.toolbar .tbl-icon{line-height:1;}
+.toolbar .tbl-main{font-size:.85rem; font-weight:700; line-height:1;}
+.toolbar button.icon-btn.active .tbl, .toolbar button.icon-btn.active .tbl-main{color:#fff;}
+[data-theme="hc"] .toolbar button.icon-btn.active .tbl, [data-theme="hc"] .toolbar button.icon-btn.active .tbl-main{color:#000;}
+.toolbar label.icon-btn.color-wrap{padding:6px 6px 6px;}
+.toolbar input[type="color"].color-input{flex-shrink:0; width:26px; height:20px; padding:0; border:1px solid var(--border); border-radius:4px;}
+
+#mapWrap{flex:1; width:100%; min-height:280px; position:relative;}
+#map{width:100%; height:100%;}
+.compass-badge{
+  position:absolute; top:10px; right:10px; z-index:500; background:var(--surface); border:1px solid var(--border);
+  border-radius:50%; width:42px; height:42px; display:flex; align-items:center; justify-content:center;
+  font-size:.62rem; font-weight:700; cursor:pointer; color:var(--text); flex-direction:column; user-select:none;
+}
+.compass-badge .arrow{font-size:.9rem; transition:transform .15s linear;}
+
+.route-info{
+  padding:10px 14px; background:var(--surface); border-top:1px solid var(--border);
+  display:none; align-items:center; justify-content:space-between; gap:10px;
+}
+.route-info.show{display:flex;}
+.route-info .stat{font-size:.8rem; color:var(--muted);}
+.route-info .stat b{color:var(--text); font-size:.95rem;}
+.route-info .clear{color:var(--danger); background:none; border:none; font-size:.8rem; font-weight:600; cursor:pointer;}
+.route-info .side-actions{display:flex; gap:6px; align-items:center;}
+
+.spinner{
+  width:14px; height:14px; border:2px solid var(--muted); border-top-color:var(--accent);
+  border-radius:50%; display:inline-block; animation:spin .7s linear infinite; margin-right:6px; vertical-align:middle;
+}
+@keyframes spin{ to{ transform:rotate(360deg); } }
+
+.steps-panel, .elev-panel{background:var(--surface); border-top:1px solid var(--border); display:none;}
+.steps-panel.show, .elev-panel.show{display:block;}
+.steps-header{
+  padding:9px 14px; font-size:.78rem; font-weight:700; display:flex; justify-content:space-between;
+  cursor:pointer; color:var(--text);
+}
+.steps-list{max-height:180px; overflow-y:auto; display:none; padding:0 14px 10px;}
+.steps-list.open{display:block;}
+.step-item{font-size:.78rem; padding:6px 0; border-bottom:1px solid var(--border); color:var(--text); cursor:pointer;}
+.step-item:last-child{border-bottom:none;}
+.step-item span{color:var(--muted); font-size:.7rem;}
+.step-item.current{color:var(--accent); font-weight:700;}
+.elev-panel{padding:10px 14px;}
+.elev-panel .elev-stats{font-size:.7rem; color:var(--muted); margin-top:4px; display:flex; justify-content:space-between;}
+
+.status{ padding:6px 14px; font-size:.72rem; color:var(--muted); text-align:center; min-height:18px; }
+
+footer{
+  padding:10px 14px 16px; text-align:center; font-size:.72rem; color:var(--muted);
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px;
+  border-top:1px solid var(--border);
+}
+.privacy-toggle{background:none; border:none; color:var(--muted); text-decoration:underline; font-size:.7rem; cursor:pointer; padding:2px;}
+.privacy-note{font-size:.68rem; color:var(--muted); max-width:400px; display:none; line-height:1.4;}
+.privacy-note.open{display:block;}
+.leaflet-control-attribution{font-size:9px !important;}
+.heading-arrow{ width:22px; height:22px; display:flex; align-items:center; justify-content:center; }
+.heading-arrow svg{ filter:drop-shadow(0 1px 2px rgba(0,0,0,.5)); }
+
+.map-badge{
+  position:absolute; z-index:500; background:var(--surface); border:1px solid var(--border);
+  border-radius:12px; padding:6px 10px; font-size:.68rem; font-weight:700; cursor:pointer;
+  color:var(--text); user-select:none; display:none;
+}
+.map-badge.show{display:block;}
+#layerBadge{ top:96px; left:10px; display:block; }
+.layer-picker{
+  position:absolute; top:130px; left:10px; z-index:600; background:var(--surface); border:1px solid var(--border);
+  border-radius:12px; padding:6px 4px; display:none; max-height:260px; overflow-y:auto; width:170px;
+  box-shadow:0 4px 16px rgba(0,0,0,.25);
+}
+.layer-picker.show{display:block;}
+.layer-picker .step-item{padding:8px 10px; border-bottom:1px solid var(--border);}
+.layer-picker .step-item:last-child{border-bottom:none;}
+#speedBadge{ bottom:10px; left:10px; text-align:center; line-height:1.3; cursor:default; }
+.chip.disabled{opacity:.45; cursor:not-allowed;}
+.compare-panel{background:var(--surface); border-top:1px solid var(--border); padding:10px 14px; display:none;}
+.compare-panel.show{display:block;}
+.compare-panel table{width:100%; border-collapse:collapse; font-size:.78rem;}
+.compare-panel th{text-align:left; color:var(--muted); font-size:.68rem; padding-bottom:4px;}
+.compare-panel td{padding:5px 0; border-top:1px solid var(--border);}
+input[type="color"].color-input{width:44px; height:38px; padding:2px; border-radius:8px; border:1px solid var(--border); background:var(--surface); cursor:pointer;}
+
+/* Battery saver: dim the map to reduce screen power draw */
+#map.battery-dim{ filter:brightness(.65) saturate(.75); }
+
+/* Large / elderly-friendly mode: scale root font-size so all rem-based text and controls grow */
+html.large-mode{ font-size:118%; }
+html.large-mode .toolbar button.icon-btn, html.large-mode .toolbar label.icon-btn{ min-width:58px; padding:9px 8px; }
+html.large-mode input[type="text"]{ padding:14px 12px; }
+
+/* Kids mode: hide everything except the essentials, behind a PIN to exit */
+body.kids-mode .toolbar button:not(#kidsModeBtn):not(#homeBtn):not(#recenterBtn):not(#liveBtn),
+body.kids-mode .toolbar label.icon-btn{ display:none; }
+body.kids-mode #avoidChips, body.kids-mode #overlayChips, body.kids-mode #poiChips,
+body.kids-mode #favChips .x, body.kids-mode #waypointsList, body.kids-mode #addStopBtn{ display:none; }
+body.kids-mode #sosBtn{ display:flex !important; } /* SOS always stays reachable */
+
+.pin-swatch{ width:14px; height:14px; border-radius:50%; display:inline-block; margin-right:5px; vertical-align:middle; border:1px solid rgba(0,0,0,.2); }
+
+/* 3D tilt (#44): a CSS perspective trick on the flat map, not real terrain geometry */
+#map.tilt-3d{ transform:perspective(600px) rotateX(35deg) scale(1.3); transform-origin:center bottom; transition:transform .3s; }
+
+@media print{
+  header, .controls, .status, .map-badge, .compass-badge, .layer-picker, footer, #arOverlay{ display:none !important; }
+  #mapWrap{ height:50vh !important; min-height:0 !important; }
+  .steps-panel{ display:block !important; }
+  .steps-list{ display:block !important; max-height:none !important; }
+}
+</style>
+<meta property="og:title" content="MapOrb — Free Navigation">
+<meta property="og:description" content="Free, keyless turn-by-turn navigation, live tracking, and distance measurement.">
+<meta property="og:type" content="website">
+<meta property="og:image" content="icons/icon-512.png">
+<!-- Note (#34): this is a static, generic preview card. A unique per-route preview
+     image isn't possible without a server component — social platforms read these
+     tags without running JavaScript, and MapOrb has no backend to render one. -->
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>🧭 MapOrb</h1>
+    <div class="theme-toggle" id="themeToggle">
+      <button data-theme="dark">Dark</button>
+      <button data-theme="light" class="active">Light</button>
+      <button data-theme="oled">OLED</button>
+      <button data-theme="hc">HC</button>
+    </div>
+  </header>
+
+  <div id="fileProtocolWarning" style="display:none; background:#b45309; color:#fff; font-size:.78rem; padding:10px 14px; line-height:1.4;">
+    ⚠️ You're opening this file directly (not through a website). Browsers block map data,
+    location, and most other features on files opened this way — it's a security rule that
+    applies to every site, not a bug in this app. To fix it: upload this whole folder to a free
+    host like GitHub Pages, then open it from that https:// link instead.
+  </div>
+
+  <div class="controls">
+    <div class="field-row">
+      <input type="text" id="fromInput" placeholder="Start (or use my location)">
+      <button class="icon-btn" id="locBtn" title="Use my location">📍 Locate</button>
+    </div>
+    <div class="suggestions" id="fromSuggest"></div>
+
+    <div class="field-row">
+      <button class="icon-btn" id="swapBtn" title="Swap start & destination">⇅ Swap</button>
+      <div class="theme-toggle grow" id="profileToggle">
+        <button data-profile="driving" class="active">🚗 Drive</button>
+        <button data-profile="cycling">🚴 Bike</button>
+        <button data-profile="walking">🚶 Walk</button>
+      </div>
+    </div>
+
+    <div class="field-row">
+      <input type="text" id="toInput" placeholder="Destination">
+      <button class="btn" id="goBtn">Go</button>
+    </div>
+    <div class="suggestions" id="toSuggest"></div>
+
+    <div id="waypointsList"></div>
+
+    <div class="chips show" id="avoidChips">
+      <div class="chip" data-avoid="motorway">🛣️ Highways</div>
+      <div class="chip" data-avoid="toll">💰 Tolls</div>
+      <div class="chip" data-avoid="ferry">⛴️ Ferries</div>
+    </div>
+
+    <div class="chips" id="favChips"></div>
+
+    <div class="toolbar" id="mainToolbar">
+      <button class="icon-btn" id="addStopBtn" title="Add a stop">➕<span class="tbl">Stop</span></button>
+      <button class="icon-btn" id="tapSetBtn" title="Tap map to set a point"><span class="tbl-icon">📌</span><span class="tbl">Tap-set</span></button>
+      <button class="icon-btn" id="favBtn" title="Save destination as favorite">⭐<span class="tbl">Favorite</span></button>
+      <button class="icon-btn" id="homeBtn" title="Go home / tap again to save current destination as Home">🏠<span class="tbl">Home</span></button>
+      <button class="icon-btn" id="workBtn" title="Go to work / tap again to save current destination as Work">🏢<span class="tbl">Work</span></button>
+      <button class="icon-btn" id="liveBtn" title="Start live tracking">🛰️<span class="tbl">Live</span></button>
+      <button class="icon-btn" id="recenterBtn" title="Recenter on me">🎯<span class="tbl">Recenter</span></button>
+      <button class="icon-btn" id="voiceBtn" title="Voice guidance"><span class="tbl-icon">🔇</span><span class="tbl">Voice</span></button>
+      <button class="icon-btn" id="sosBtn" title="Emergency SOS">🆘<span class="tbl">SOS</span></button>
+      <button class="icon-btn" id="shareLocBtn" title="Share current location (snapshot, not live)">📍<span class="tbl">My spot</span></button>
+      <button class="icon-btn" id="lateBtn" title="Share a running-late ETA update">⏰<span class="tbl">Running late</span></button>
+      <button class="icon-btn" id="shareBtn" title="Share route">🔗<span class="tbl">Share</span></button>
+      <button class="icon-btn" id="unitsBtn" title="Toggle units"><span class="tbl-main">km</span><span class="tbl">Units</span></button>
+      <button class="icon-btn" id="importBtn" title="Import GPX/KML">📂<span class="tbl">Import</span></button>
+      <button class="icon-btn" id="exportBtn" title="Export route as GPX">💾<span class="tbl">Export</span></button>
+      <button class="icon-btn" id="calBtn" title="Import destination from a calendar .ics file">📅<span class="tbl">Calendar</span></button>
+      <button class="icon-btn" id="poiBtn" title="Nearby places">🔍<span class="tbl">Nearby</span></button>
+      <button class="icon-btn" id="weatherBtn" title="Weather at destination">🌤️<span class="tbl">Weather</span></button>
+      <button class="icon-btn" id="fuelCostBtn" title="Estimate trip fuel/energy cost">⛽<span class="tbl">Trip cost</span></button>
+      <button class="icon-btn" id="rangeBtn" title="Check if your remaining range covers this route">🪫<span class="tbl">Range</span></button>
+      <button class="icon-btn" id="splitBtn" title="Split trip cost between riders">👥<span class="tbl">Split</span></button>
+      <button class="icon-btn" id="bikeLanesBtn" title="Show nearby bike lanes">🚴<span class="tbl">Bike lanes</span></button>
+      <button class="icon-btn" id="historyBtn" title="Trip history">🕓<span class="tbl">History</span></button>
+      <label class="icon-btn color-wrap" title="Route line color"><input type="color" id="routeColor" class="color-input" value="#4f8cff"><span class="tbl">Color</span></label>
+      <button class="icon-btn" id="paletteBtn" title="Colorblind-friendly route color presets">🎨<span class="tbl">Palette</span></button>
+      <button class="icon-btn" id="voiceLangBtn" title="Choose turn-by-turn voice language">🌐<span class="tbl">Voice lang</span></button>
+      <button class="icon-btn" id="toneBtn" title="Cycle turn/arrival alert sound">🔔<span class="tbl-main" id="toneLabel">Beep</span><span class="tbl">Alert tone</span></button>
+      <button class="icon-btn" id="autoThemeBtn" title="Auto-switch Dark/Light theme by local sunrise & sunset">🌗<span class="tbl">Auto theme</span></button>
+      <button class="icon-btn" id="batterySaverBtn" title="Reduce GPS polling and dim the map to save battery">🔋<span class="tbl">Battery saver</span></button>
+      <button class="icon-btn" id="largeModeBtn" title="Larger buttons and text for easier tapping">🔠<span class="tbl">Large mode</span></button>
+      <button class="icon-btn" id="kidsModeBtn" title="Simplified, locked-down view for kids">🧒<span class="tbl">Kids mode</span></button>
+      <button class="icon-btn" id="focusModeBtn" title="Mute MapOrb's own turn alerts &amp; vibration during navigation. Browsers can't control your phone's system-wide Do Not Disturb — this only quiets this app.">🔕<span class="tbl">Focus mode</span></button>
+      <button class="icon-btn" id="wakeLockBtn" title="Keep screen on">🔆<span class="tbl">Screen on</span></button>
+      <button class="icon-btn" id="measureBtn" title="Measure distance">📏<span class="tbl">Measure</span></button>
+      <button class="icon-btn" id="exportImageBtn" title="Export current map view as an image (may show blank tiles — see note)">🖼️<span class="tbl">Map image</span></button>
+      <button class="icon-btn" id="printMapBtn" title="Print the map + directions (use your browser's Save as PDF)">🖨️<span class="tbl">Print</span></button>
+      <button class="icon-btn" id="contactsBtn" title="Pick a destination from your contacts (Android Chrome only)">📇<span class="tbl">Contacts</span></button>
+      <button class="icon-btn" id="clipboardBtn" title="Paste an address from your clipboard">📋<span class="tbl">Paste addr</span></button>
+      <button class="icon-btn" id="qrScanBtn" title="Scan a QR code to set a destination">📷<span class="tbl">Scan QR</span></button>
+      <button class="icon-btn" id="langBtn" title="Interface language">🌐<span class="tbl-main" id="langLabel">EN</span></button>
+      <button class="icon-btn" id="currencyBtn" title="Currency for cost estimates">💱<span class="tbl-main" id="currencyLabel">USD</span></button>
+      <button class="icon-btn" id="tilt3DBtn" title="Tilted perspective view (visual effect on the flat map, not true 3D terrain)">🎬<span class="tbl">3D view</span></button>
+      <button class="icon-btn" id="arBtn" title="Camera + compass arrow toward your next turn (not full markerless AR)">🕶️<span class="tbl">AR view</span></button>
+    </div>
+    <div class="compare-panel" id="palettePicker"><div class="steps-list open" id="palettePickerList"></div></div>
+    <div class="compare-panel" id="voiceLangPicker"><div class="steps-list open" id="voiceLangPickerList"></div></div>
+    <input type="file" id="importFile" accept=".gpx,.kml" style="display:none;">
+    <input type="file" id="calFile" accept=".ics" style="display:none;">
+
+    <div class="chips" id="poiChips">
+      <div class="chip" data-amenity="fuel">⛽ Fuel</div>
+      <div class="chip" data-amenity="restaurant">🍔 Food</div>
+      <div class="chip" data-amenity="hospital">🏥 Hospital</div>
+      <div class="chip" data-amenity="atm">🏧 ATM</div>
+      <div class="chip" data-amenity="charging_station">🔋 EV charging</div>
+      <div class="chip" id="openNowChip" title="Filters results using OSM opening_hours data where available — coverage is partial. No free source exists for price-level filtering, so that filter isn't offered.">🕐 Open now</div>
+    </div>
+    <div class="status" id="weatherStatus"></div>
+
+    <div class="steps-panel" id="historyPanel">
+      <div class="steps-header" id="historyHeader">Trip history <span id="historyCaret">▾</span></div>
+      <div class="steps-list open" id="historyList"></div>
+    </div>
+  </div>
+
+  <video id="camFeed" autoplay playsinline muted style="display:none;"></video>
+  <canvas id="camCanvas" style="display:none;"></canvas>
+  <div id="arOverlay" style="display:none; position:fixed; inset:0; z-index:2000; background:#000;">
+    <video id="arVideo" autoplay playsinline muted style="width:100%; height:100%; object-fit:cover;"></video>
+    <div id="arArrow" style="position:absolute; top:50%; left:50%; font-size:4rem; transform:translate(-50%,-50%); text-shadow:0 2px 8px rgba(0,0,0,.6);">⬆️</div>
+    <div id="arInfo" style="position:absolute; bottom:30px; left:0; right:0; text-align:center; color:#fff; font-size:.9rem;"></div>
+    <button id="arCloseBtn" style="position:absolute; top:16px; right:16px; background:rgba(0,0,0,.5); color:#fff; border:none; border-radius:20px; padding:8px 14px;">✕ Close</button>
+  </div>
+
+  <div class="status" id="status"></div>
+
+  <div id="mapWrap">
+    <div id="map"></div>
+    <div class="map-badge show" id="layerBadge" title="Tap to choose a map style">🗺️ Street</div>
+    <div class="map-badge" id="speedBadge">– km/h<br><span id="odoVal">0.0 km</span></div>
+    <div class="compass-badge" id="compassBadge" title="Tap to enable compass heading">
+      <span class="arrow" id="compassArrow">⬆️</span><span id="compassDeg">off</span>
+    </div>
+    <div class="layer-picker" id="layerPicker">
+      <div class="steps-list open" id="layerPickerList"></div>
+    </div>
+  </div>
+
+  <div class="chips show" id="overlayChips">
+    <div class="chip" data-overlay="seamap" title="Nautical buoys, marinas, depths">🌊 Sea marks</div>
+    <div class="chip" data-overlay="rail" title="Rail lines and stations">🚂 Railways</div>
+    <div class="chip" data-overlay="rain" title="Live precipitation radar">🌧️ Rain radar</div>
+    <div class="chip" data-overlay="daynight" title="Shades the side of the globe currently in darkness">🌓 Day/Night</div>
+    <div class="chip" data-overlay="relief" title="Hillshade texture blended over any base map">⛰️ Relief shade</div>
+    <div class="chip" data-overlay="piste" title="Ski piste coverage — small volunteer-run server, may be unreliable">🎿 Ski pistes</div>
+  </div>
+
+  <div class="chips" id="routeAlts"></div>
+
+  <div class="compare-panel" id="comparePanel">
+    <table id="compareTable"></table>
+  </div>
+
+  <div class="route-info" id="measureInfo">
+    <div class="stat">Points<br><b id="measurePts">0</b></div>
+    <div class="stat">Straight-line distance<br><b id="measureDist">–</b></div>
+    <button class="clear" id="measureClearBtn">Clear</button>
+  </div>
+
+  <div class="route-info" id="routeInfo">
+    <div class="stat">Distance<br><b id="distVal">–</b></div>
+    <div class="stat">Time · ETA<br><b id="timeVal">–</b></div>
+    <div class="side-actions"><button class="clear" id="clearBtn">Clear</button></div>
+  </div>
+
+  <div class="elev-panel" id="elevPanel">
+    <svg id="elevSvg" viewBox="0 0 300 60" width="100%" height="60" preserveAspectRatio="none"></svg>
+    <div class="elev-stats" id="elevStats"></div>
+  </div>
+
+  <div class="steps-panel" id="stepsPanel">
+    <div class="steps-header" id="stepsHeader">Turn-by-turn directions <span id="stepsCaret">▾</span></div>
+    <div class="steps-list" id="stepsList"></div>
+  </div>
+
+  <footer>
+    <div>Free routing via OSRM · Map data © OpenStreetMap contributors</div>
+    <div>© Manik Roy <span id="year"></span>. All Rights Reserved.</div>
+    <button class="privacy-toggle" id="privacyToggle">ℹ️ Privacy & data</button>
+    <div class="privacy-note" id="privacyNote">
+      Searches go to OpenStreetMap Nominatim, routes go to the OSRM demo server, and elevation lookups go to
+      Open-Elevation — all free, keyless public services. No accounts, ads, or analytics. Recents, favorites and
+      theme are stored only on this device via localStorage.
+    </div>
+  </footer>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
+<script>
+if (typeof L === 'undefined') {
+  document.write('<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"><\/script>');
+}
+</script>
+<script>
+if (typeof L === 'undefined') {
+  document.getElementById('status') && (document.getElementById('status').textContent = 'Map library failed to load. Check your internet connection and reload.');
+}
+document.getElementById('year').textContent = new Date().getFullYear();
+
+// Detect the file:// case up front — this is the #1 cause of "nothing connects,
+// location doesn't work" reports for a single-file app like this one, and it isn't
+// fixable from inside the page: browsers deliberately block Geolocation (and often
+// restrict fetch/CORS) for files opened directly, on every website, not just this one.
+if(location.protocol === 'file:'){
+  document.getElementById('fileProtocolWarning').style.display = 'block';
+}
+
+// ---------- Retry helper (graceful degradation + exponential backoff) ----------
+async function fetchWithRetry(url, options, retries=2, delayMs=600){
+  for(let attempt=0; attempt<=retries; attempt++){
+    try{
+      const res = await fetch(url, options);
+      if(!res.ok) throw new Error('HTTP ' + res.status);
+      return res;
+    }catch(e){
+      if(attempt === retries) throw e;
+      await new Promise(r => setTimeout(r, delayMs * Math.pow(2, attempt)));
+    }
+  }
+}
+
+// ---------- Theme ----------
+const themeBtns = document.querySelectorAll('.theme-toggle#themeToggle button');
+// Storage key intentionally versioned to "-v2": earlier testing saved a "dark"
+// preference under the old "maporb-theme" key back when Dark was the default.
+// Reading a new key ignores that stale value so Light applies as the true default
+// for everyone, without requiring anyone to manually clear browser storage.
+function applyTheme(t){
+  document.documentElement.setAttribute('data-theme', t);
+  localStorage.setItem('maporb-theme-v2', t);
+  themeBtns.forEach(b => b.classList.toggle('active', b.dataset.theme === t));
+}
+themeBtns.forEach(b => b.addEventListener('click', () => {
+  applyTheme(b.dataset.theme);
+  if(typeof syncMapLayerToTheme === 'function') syncMapLayerToTheme();
+}));
+applyTheme(localStorage.getItem('maporb-theme-v2') || 'light');
+
+// ---------- Map ----------
+if (typeof L === 'undefined') {
+  throw new Error('Leaflet failed to load — check your internet connection and reload the page.');
+}
+const map = L.map('map', {zoomControl:true}).setView([20.5937,78.9629], 5);
+
+// ---------- Map layers (14 free & keyless base styles) ----------
+const tileLayers = {
+  street: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19, attribution:'&copy; OpenStreetMap contributors'}),
+  light: L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {maxZoom:19, subdomains:'abcd', attribution:'&copy; OpenStreetMap contributors &copy; CARTO'}),
+  dark: L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {maxZoom:19, subdomains:'abcd', attribution:'&copy; OpenStreetMap contributors &copy; CARTO'}),
+  voyager: L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {maxZoom:19, subdomains:'abcd', attribution:'&copy; OpenStreetMap contributors &copy; CARTO'}),
+  physical: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Physical_Map/MapServer/tile/{z}/{y}/{x}', {maxZoom:19, maxNativeZoom:8, attribution:'Tiles &copy; Esri — physical/relief map'}),
+  satellite: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {maxZoom:19, attribution:'Tiles &copy; Esri'}),
+  hybrid: L.layerGroup([
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {maxZoom:19, attribution:'Tiles &copy; Esri'}),
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {maxZoom:19, attribution:'Labels &copy; Esri'})
+  ]),
+  terrain: L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {maxZoom:17, attribution:'Map data: &copy; OpenStreetMap, SRTM · Style: &copy; OpenTopoMap'}),
+  cycle: L.tileLayer('https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png', {maxZoom:20, subdomains:'abc', attribution:'&copy; OpenStreetMap contributors · Style: &copy; CyclOSM'}),
+  hot: L.tileLayer('https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png', {maxZoom:19, subdomains:'abc', attribution:'&copy; OpenStreetMap contributors · Style: Humanitarian OSM Team'}),
+  esriStreet: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {maxZoom:19, attribution:'Tiles &copy; Esri'}),
+  natgeo: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/NatGeo_World_Map/MapServer/tile/{z}/{y}/{x}', {maxZoom:16, attribution:'Tiles &copy; Esri, National Geographic'}),
+  ocean: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}', {maxZoom:19, maxNativeZoom:13, attribution:'Tiles &copy; Esri — ocean/bathymetry map'}),
+  wikimedia: L.tileLayer('https://maps.wikimedia.org/osm-intl/{z}/{x}/{y}.png', {maxZoom:19, attribution:'&copy; OpenStreetMap contributors, hosted by Wikimedia'})
+};
+const layerOrder = ['street','light','dark','voyager','physical','satellite','hybrid','terrain','cycle','hot','esriStreet','natgeo','ocean','wikimedia'];
+const layerLabels = {
+  street:'🗺️ Street', light:'🌤️ Light', dark:'🌑 Dark', voyager:'🧭 Voyager', physical:'🏔️ Physical',
+  satellite:'🛰️ Satellite', hybrid:'🛰️ Hybrid', terrain:'⛰️ Terrain', cycle:'🚴 Cycle',
+  hot:'🚑 Humanitarian', esriStreet:'🛣️ Esri Street', natgeo:'📖 Nat Geo', ocean:'🌊 Ocean', wikimedia:'📚 Wikimedia'
+};
+let currentLayerKey = 'street';
+let layerManuallyPicked = false;
+tileLayers.street.addTo(map);
+function selectBaseLayer(key){
+  if(key === currentLayerKey) return;
+  tileLayers[currentLayerKey].remove();
+  currentLayerKey = key;
+  tileLayers[currentLayerKey].addTo(map);
+  document.getElementById('layerBadge').textContent = layerLabels[currentLayerKey];
+}
+// Match the map style to the current app theme on first load, unless the user has since picked one manually
+function syncMapLayerToTheme(){
+  if(layerManuallyPicked) return;
+  const theme = document.documentElement.getAttribute('data-theme');
+  const wanted = (theme === 'dark' || theme === 'oled' || theme === 'hc') ? 'dark' : 'light';
+  selectBaseLayer(wanted);
+}
+syncMapLayerToTheme();
+function renderLayerPicker(){
+  document.getElementById('layerPickerList').innerHTML = layerOrder.map(k =>
+    `<div class="step-item${k===currentLayerKey?' current':''}" data-layer="${k}">${layerLabels[k]}</div>`
+  ).join('');
+  document.querySelectorAll('#layerPickerList .step-item').forEach(el => {
+    el.addEventListener('click', () => {
+      layerManuallyPicked = true;
+      selectBaseLayer(el.dataset.layer);
+      document.getElementById('layerPicker').classList.remove('show');
+    });
+  });
+}
+document.getElementById('layerBadge').addEventListener('click', () => {
+  const panel = document.getElementById('layerPicker');
+  panel.classList.toggle('show');
+  if(panel.classList.contains('show')) renderLayerPicker();
+});
+
+// ---------- Overlays: independent layers that sit on top of any base map ----------
+const overlayLayers = {};
+const overlayIntervals = {};
+function computeTerminatorLatLngs(date){
+  const rad = Math.PI/180;
+  const start = Date.UTC(date.getUTCFullYear(),0,1);
+  const dayOfYear = (date - start) / 86400000;
+  const dec = -23.44 * Math.cos(rad*(360/365 * (dayOfYear+10)));
+  const decRad = dec*rad;
+  const utcHours = date.getUTCHours() + date.getUTCMinutes()/60;
+  const coords = [];
+  for(let lon=-180; lon<=180; lon+=4){
+    const h = (15*(utcHours-12) + lon) * rad;
+    let lat = Math.atan(-Math.cos(h) / Math.tan(decRad)) / rad;
+    lat = Math.max(-89, Math.min(89, lat));
+    coords.push([lat, lon]);
+  }
+  const pole = dec >= 0 ? -90 : 90; // the pole currently in full darkness
+  coords.push([pole, 180]);
+  coords.push([pole, -180]);
+  return coords;
+}
+async function addRainOverlay(){
+  const res = await fetchWithRetry('https://api.rainviewer.com/public/weather-maps.json');
+  const data = await res.json();
+  const frames = data.radar && (data.radar.nowcast && data.radar.nowcast.length ? data.radar.nowcast : data.radar.past);
+  if(!frames || !frames.length) throw new Error('No radar frames available');
+  const path = frames[frames.length-1].path;
+  overlayLayers.rain = L.tileLayer(`https://tilecache.rainviewer.com/v2/radar/${path}/256/{z}/{x}/{y}/2/1_1.png`, {
+    maxZoom:12, opacity:0.6, attribution:'&copy; RainViewer'
+  }).addTo(map);
+  overlayIntervals.rain = setInterval(async () => {
+    if(overlayLayers.rain) map.removeLayer(overlayLayers.rain);
+    try{ await addRainOverlay(); }catch(e){}
+  }, 10*60*1000);
+}
+document.querySelectorAll('#overlayChips .chip').forEach(chip => {
+  chip.addEventListener('click', async () => {
+    const key = chip.dataset.overlay;
+    if(overlayLayers[key]){
+      map.removeLayer(overlayLayers[key]); delete overlayLayers[key];
+      if(overlayIntervals[key]){ clearInterval(overlayIntervals[key]); delete overlayIntervals[key]; }
+      chip.classList.remove('active');
+      return;
+    }
+    chip.classList.add('active');
+    try{
+      if(key === 'seamap'){
+        overlayLayers[key] = L.tileLayer('https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png', {maxZoom:18, attribution:'&copy; OpenSeaMap'}).addTo(map);
+      } else if(key === 'rail'){
+        overlayLayers[key] = L.tileLayer('https://{s}.tiles.openrailwaymap.org/standard/{z}/{x}/{y}.png', {maxZoom:19, subdomains:'abc', attribution:'&copy; OpenRailwayMap'}).addTo(map);
+      } else if(key === 'relief'){
+        overlayLayers[key] = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Shaded_Relief/MapServer/tile/{z}/{y}/{x}', {maxZoom:13, opacity:0.35, attribution:'Tiles &copy; Esri'}).addTo(map);
+      } else if(key === 'piste'){
+        overlayLayers[key] = L.tileLayer('https://tiles.opensnowmap.org/pistes/{z}/{x}/{y}.png', {maxZoom:18, opacity:0.8, attribution:'&copy; OpenSnowMap contributors'}).addTo(map);
+      } else if(key === 'rain'){
+        setStatus('Loading rain radar…', true);
+        await addRainOverlay();
+        setStatus('');
+      } else if(key === 'daynight'){
+        overlayLayers[key] = L.polygon(computeTerminatorLatLngs(new Date()), {color:'#000', weight:0, fillColor:'#000', fillOpacity:0.32, interactive:false}).addTo(map);
+        overlayIntervals[key] = setInterval(() => { if(overlayLayers.daynight) overlayLayers.daynight.setLatLngs(computeTerminatorLatLngs(new Date())); }, 5*60*1000);
+      }
+    }catch(e){
+      chip.classList.remove('active'); delete overlayLayers[key];
+      setStatus(`${chip.textContent.trim()} overlay unavailable right now.`);
+    }
+  });
+});
+
+
+let fromMarker=null, toMarker=null, routeLine=null;
+let fromCoords=null, toCoords=null;
+let profile = 'driving';
+
+const statusEl = document.getElementById('status');
+function setStatus(msg, spinning){ statusEl.innerHTML = (spinning ? '<span class="spinner"></span>' : '') + (msg||''); }
+const mapEl = document.getElementById('map');
+const fromInput = document.getElementById('fromInput');
+const toInput = document.getElementById('toInput');
+const fromSuggest = document.getElementById('fromSuggest');
+const toSuggest = document.getElementById('toSuggest');
+
+// ---------- Units (km / miles) ----------
+let units = localStorage.getItem('maporb-units') || 'km';
+document.querySelector('#unitsBtn .tbl-main').textContent = units;
+function formatDistance(meters){
+  if(units === 'mi'){ const mi = meters/1609.34; return mi < 1 ? `${Math.round(mi*5280)} ft` : `${mi.toFixed(1)} mi`; }
+  return meters < 1000 ? `${Math.round(meters)} m` : `${(meters/1000).toFixed(1)} km`;
+}
+let lastDistanceMeters=null, lastDurationSeconds=null;
+function renderRouteStats(){
+  if(lastDistanceMeters==null) return;
+  const mins = Math.round(lastDurationSeconds/60);
+  const hrs = Math.floor(mins/60), remMins = mins%60;
+  const durText = hrs>0 ? `${hrs}h ${remMins}m` : `${mins} min`;
+  const eta = new Date(Date.now() + lastDurationSeconds*1000).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+  document.getElementById('distVal').textContent = formatDistance(lastDistanceMeters);
+  document.getElementById('timeVal').textContent = `${durText} · ETA ${eta}`;
+}
+document.getElementById('unitsBtn').addEventListener('click', () => {
+  units = units === 'km' ? 'mi' : 'km';
+  localStorage.setItem('maporb-units', units);
+  document.querySelector('#unitsBtn .tbl-main').textContent = units;
+  renderRouteStats();
+  updateMeasureUI();
+  if(typeof renderSpeedBadge === 'function') renderSpeedBadge();
+});
+
+// ---------- Geocoding & reverse geocoding (Nominatim, free, no key) ----------
+let lastKnownPos = null;
+async function geocode(query){
+  let url = `https://nominatim.openstreetmap.org/search?format=json&limit=5&q=${encodeURIComponent(query)}`;
+  if(lastKnownPos){
+    const [lat,lon]=lastKnownPos;
+    url += `&viewbox=${lon-2},${lat+2},${lon+2},${lat-2}&bounded=0`; // soft bias toward current location
+  }
+  const res = await fetchWithRetry(url, {headers:{'Accept':'application/json'}});
+  return res.json();
+}
+async function reverseGeocode(lat, lon){
+  try{
+    const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}`;
+    const res = await fetchWithRetry(url, {headers:{'Accept':'application/json'}});
+    const data = await res.json();
+    return data.display_name || `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+  }catch(e){ return `${lat.toFixed(5)}, ${lon.toFixed(5)}`; }
+}
+
+// ---------- Recent searches ----------
+function getRecents(){ try{ return JSON.parse(localStorage.getItem('maporb-recents')||'[]'); }catch(e){ return []; } }
+function addRecent(item){
+  let list = getRecents().filter(r => r.name !== item.name);
+  list.unshift(item); list = list.slice(0,6);
+  localStorage.setItem('maporb-recents', JSON.stringify(list));
+}
+function wireSuggest(inputEl, suggestEl, onPick){
+  let timer=null;
+  function renderRecents(){
+    const recents = getRecents();
+    if(!recents.length){ suggestEl.style.display='none'; return; }
+    suggestEl.innerHTML = recents.map((r,i) => `<div data-idx="${i}"><span class="tag">RECENT</span>${r.name}</div>`).join('');
+    suggestEl.style.display='block';
+    suggestEl.querySelectorAll('div').forEach(div => {
+      div.addEventListener('click', () => {
+        const r = recents[div.dataset.idx];
+        inputEl.value = r.name; suggestEl.style.display='none'; onPick(r);
+      });
+    });
+  }
+  inputEl.addEventListener('focus', () => { if(!inputEl.value.trim()) renderRecents(); });
+  inputEl.addEventListener('input', () => {
+    clearTimeout(timer);
+    const q = inputEl.value.trim();
+    if(q.length < 3){ if(!q) renderRecents(); else { suggestEl.style.display='none'; suggestEl.innerHTML=''; } return; }
+    timer = setTimeout(async () => {
+      try{
+        const results = await geocode(q);
+        if(!results.length){ suggestEl.style.display='none'; return; }
+        suggestEl.innerHTML = results.map((r,i) => `<div data-idx="${i}">${r.display_name}</div>`).join('');
+        suggestEl.style.display='block';
+        suggestEl.querySelectorAll('div').forEach(div => {
+          div.addEventListener('click', () => {
+            const r = results[div.dataset.idx];
+            const loc = {lat:parseFloat(r.lat), lon:parseFloat(r.lon), name:r.display_name};
+            inputEl.value = r.display_name; suggestEl.style.display='none';
+            addRecent(loc); onPick(loc);
+          });
+        });
+      }catch(e){ setStatus('Search unavailable, try again.'); }
+    }, 500);
+  });
+}
+wireSuggest(fromInput, fromSuggest, (loc) => setPoint('from', loc));
+wireSuggest(toInput, toSuggest, (loc) => setPoint('to', loc));
+
+function setPoint(which, loc){
+  const latlng = [loc.lat, loc.lon];
+  if(which === 'from'){
+    fromCoords = latlng;
+    if(fromMarker) map.removeLayer(fromMarker);
+    fromMarker = L.marker(latlng, {title:'Start'}).addTo(map);
+  } else {
+    toCoords = latlng;
+    if(toMarker) map.removeLayer(toMarker);
+    toMarker = L.marker(latlng, {title:'Destination'}).addTo(map);
+  }
+  map.setView(latlng, 13);
+}
+
+// ---------- Multi-stop waypoints ----------
+let waypoints = []; // {coords:[lat,lon]|null, marker, input, row}
+let stopCounter = 0;
+function addStopRow(){
+  const id = 'stop' + (stopCounter++);
+  const row = document.createElement('div');
+  row.className = 'field-row';
+  row.innerHTML = `<input type="text" placeholder="Stop ${waypoints.length+1}" id="${id}Input"><button class="icon-btn" data-remove-stop="${id}" title="Remove this stop">✕</button>`;
+  const suggestDiv = document.createElement('div');
+  suggestDiv.className = 'suggestions'; suggestDiv.id = id + 'Suggest';
+  document.getElementById('waypointsList').appendChild(row);
+  document.getElementById('waypointsList').appendChild(suggestDiv);
+  const input = row.querySelector('input');
+  const wp = {coords:null, marker:null, id, row, suggestDiv};
+  waypoints.push(wp);
+  wireSuggest(input, suggestDiv, (loc) => {
+    wp.coords = [loc.lat, loc.lon];
+    if(wp.marker) map.removeLayer(wp.marker);
+    wp.marker = L.marker(wp.coords, {title:'Stop'}).addTo(map);
+  });
+  row.querySelector('[data-remove-stop]').addEventListener('click', () => {
+    if(wp.marker) map.removeLayer(wp.marker);
+    waypoints = waypoints.filter(w => w !== wp);
+    row.remove(); suggestDiv.remove();
+  });
+}
+document.getElementById('addStopBtn').addEventListener('click', addStopRow);
+
+// ---------- Avoid highways / tolls / ferries ----------
+let avoidSet = new Set();
+document.querySelectorAll('#avoidChips .chip').forEach(chip => {
+  chip.addEventListener('click', () => {
+    const key = chip.dataset.avoid;
+    if(avoidSet.has(key)){ avoidSet.delete(key); chip.classList.remove('active'); }
+    else { avoidSet.add(key); chip.classList.add('active'); }
+  });
+});
+
+// ---------- Swap ----------
+document.getElementById('swapBtn').addEventListener('click', () => {
+  const tmpCoords = fromCoords; fromCoords = toCoords; toCoords = tmpCoords;
+  const tmpVal = fromInput.value; fromInput.value = toInput.value; toInput.value = tmpVal;
+  if(fromCoords) setPoint('from', {lat:fromCoords[0], lon:fromCoords[1]}); else if(fromMarker){ map.removeLayer(fromMarker); fromMarker=null; }
+  if(toCoords) setPoint('to', {lat:toCoords[0], lon:toCoords[1]}); else if(toMarker){ map.removeLayer(toMarker); toMarker=null; }
+});
+
+// ---------- Travel mode ----------
+document.querySelectorAll('#profileToggle button').forEach(b => {
+  b.addEventListener('click', () => {
+    profile = b.dataset.profile;
+    document.querySelectorAll('#profileToggle button').forEach(x => x.classList.toggle('active', x===b));
+  });
+});
+
+// ---------- Geolocation (with reverse geocoding) ----------
+document.getElementById('locBtn').addEventListener('click', () => {
+  if(!navigator.geolocation){ setStatus('Geolocation not supported.'); return; }
+  setStatus('Locating…', true);
+  navigator.geolocation.getCurrentPosition(async pos => {
+    const {latitude, longitude} = pos.coords;
+    lastKnownPos = [latitude, longitude];
+    setPoint('from', {lat:latitude, lon:longitude});
+    setStatus('Finding your address…', true);
+    fromInput.value = await reverseGeocode(latitude, longitude);
+    setStatus('');
+  }, () => setStatus('Could not get your location.'), {enableHighAccuracy:true, timeout:10000});
+});
+
+// ---------- Favorites (#30: custom pin color per favorite) ----------
+function coloredPinIcon(color){
+  return L.divIcon({
+    className:'', iconSize:[26,34], iconAnchor:[13,34],
+    html:`<svg width="26" height="34" viewBox="0 0 24 32"><path d="M12 0C5.4 0 0 5.4 0 12c0 9 12 20 12 20s12-11 12-20c0-6.6-5.4-12-12-12z" fill="${color}" stroke="#fff" stroke-width="1.5"/><circle cx="12" cy="12" r="4" fill="#fff"/></svg>`
+  });
+}
+function pickColor(defaultColor){
+  return new Promise((resolve) => {
+    const input = document.createElement('input');
+    input.type = 'color'; input.value = defaultColor; input.style.position='fixed'; input.style.opacity='0';
+    document.body.appendChild(input);
+    input.addEventListener('change', () => { resolve(input.value); input.remove(); });
+    input.addEventListener('blur', () => { setTimeout(() => { if(document.body.contains(input)){ resolve(input.value); input.remove(); } }, 300); });
+    input.click();
+  });
+}
+function getFavorites(){ try{ return JSON.parse(localStorage.getItem('maporb-favorites')||'[]'); }catch(e){ return []; } }
+function renderFavorites(){
+  const favs = getFavorites();
+  const chips = document.getElementById('favChips');
+  chips.classList.toggle('show', favs.length > 0);
+  chips.innerHTML = favs.map((f,i) => `<div class="chip" data-idx="${i}"><span class="label"><span class="pin-swatch" style="background:${f.color||'#e74c3c'}"></span>${f.label}</span><span class="x" data-del="${i}">✕</span></div>`).join('');
+  chips.querySelectorAll('.label').forEach(el => {
+    el.addEventListener('click', () => {
+      const f = favs[el.parentElement.dataset.idx];
+      toInput.value = f.label; setPoint('to', {lat:f.lat, lon:f.lon});
+      if(toMarker) toMarker.setIcon(coloredPinIcon(f.color || '#e74c3c'));
+    });
+  });
+  chips.querySelectorAll('.x').forEach(el => {
+    el.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      const list = getFavorites(); list.splice(el.dataset.del, 1);
+      localStorage.setItem('maporb-favorites', JSON.stringify(list));
+      renderFavorites();
+    });
+  });
+}
+renderFavorites();
+document.getElementById('favBtn').addEventListener('click', async () => {
+  if(!toCoords){ setStatus('Set a destination first to save it.'); return; }
+  const label = prompt('Save this destination as:', toInput.value.split(',')[0] || 'Favorite');
+  if(!label) return;
+  const color = await pickColor('#e74c3c');
+  const list = getFavorites();
+  list.unshift({label, lat:toCoords[0], lon:toCoords[1], color});
+  localStorage.setItem('maporb-favorites', JSON.stringify(list.slice(0,10)));
+  renderFavorites();
+  if(toMarker) toMarker.setIcon(coloredPinIcon(color));
+});
+
+// ---------- Tap map to set start/destination ----------
+let tapMode = null;
+const tapSetBtn = document.getElementById('tapSetBtn');
+const tapIcons = {null:'📌', from:'🅰️', to:'🅱️'};
+const tapTitles = {null:'Tap map to set a point', from:'Tap map to set START', to:'Tap map to set DESTINATION'};
+tapSetBtn.addEventListener('click', () => {
+  tapMode = tapMode === null ? 'from' : (tapMode === 'from' ? 'to' : null);
+  tapSetBtn.querySelector('.tbl-icon').textContent = tapIcons[tapMode];
+  tapSetBtn.title = tapTitles[tapMode];
+  tapSetBtn.classList.toggle('active', tapMode !== null);
+  mapEl.classList.toggle('tapping', tapMode !== null);
+});
+
+// ---------- Live GPS tracking with heading arrow ----------
+let watchId = null;
+let userMarker = null;
+const liveBtn = document.getElementById('liveBtn');
+function headingIcon(heading){
+  const rot = typeof heading === 'number' ? heading : 0;
+  return L.divIcon({
+    className:'heading-arrow',
+    html:`<div class="heading-arrow"><svg width="22" height="22" viewBox="0 0 24 24" style="transform:rotate(${rot}deg)"><path d="M12 2 L19 21 L12 17 L5 21 Z" fill="#4f8cff" stroke="#fff" stroke-width="1"/></svg></div>`,
+    iconSize:[22,22], iconAnchor:[11,11]
+  });
+}
+liveBtn.addEventListener('click', () => {
+  if(watchId){
+    navigator.geolocation.clearWatch(watchId); watchId = null;
+    liveBtn.classList.remove('active'); liveBtn.title = 'Start live tracking';
+    if(userMarker){ map.removeLayer(userMarker); userMarker = null; }
+    document.getElementById('speedBadge').classList.remove('show');
+    prevTrackPos = null;
+    return;
+  }
+  if(!navigator.geolocation){ setStatus('Geolocation not supported.'); return; }
+  liveBtn.classList.add('active'); liveBtn.title = 'Stop live tracking';
+  prevTrackPos = null;
+  const geoOpts = batterySaverOn
+    ? {enableHighAccuracy:false, maximumAge:30000, timeout:20000}
+    : {enableHighAccuracy:true, maximumAge:2000};
+  watchId = navigator.geolocation.watchPosition(pos => {
+    const {latitude, longitude, heading, speed} = pos.coords;
+    lastKnownPos = [latitude, longitude];
+    const icon = headingIcon(heading);
+    if(userMarker) userMarker.setLatLng(lastKnownPos).setIcon(icon);
+    else userMarker = L.marker(lastKnownPos, {icon}).addTo(map);
+    checkStepAdvance(lastKnownPos);
+    updateSpeedAndOdometer(lastKnownPos, speed);
+    checkAutoReroute(lastKnownPos);
+  }, () => setStatus('Live tracking failed — check location permission.'), geoOpts);
+});
+document.getElementById('recenterBtn').addEventListener('click', () => {
+  if(lastKnownPos) map.setView(lastKnownPos, 16);
+  else setStatus('No known location yet — enable live tracking or use 📍.');
+});
+
+// ---------- Compass heading badge ----------
+let compassOn = false;
+const compassBadge = document.getElementById('compassBadge');
+const compassArrow = document.getElementById('compassArrow');
+const compassDeg = document.getElementById('compassDeg');
+function onOrientation(e){
+  const heading = e.webkitCompassHeading != null ? e.webkitCompassHeading : (360 - e.alpha);
+  if(heading == null || isNaN(heading)) return;
+  compassArrow.style.transform = `rotate(${heading}deg)`;
+  compassDeg.textContent = Math.round(heading) + '°';
+}
+compassBadge.addEventListener('click', async () => {
+  if(compassOn){
+    window.removeEventListener('deviceorientationabsolute', onOrientation);
+    window.removeEventListener('deviceorientation', onOrientation);
+    compassOn = false; compassDeg.textContent = 'off'; compassArrow.style.transform = 'rotate(0deg)';
+    return;
+  }
+  try{
+    if(typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function'){
+      const perm = await DeviceOrientationEvent.requestPermission();
+      if(perm !== 'granted'){ setStatus('Compass permission denied.'); return; }
+    }
+    window.addEventListener('deviceorientationabsolute', onOrientation);
+    window.addEventListener('deviceorientation', onOrientation);
+    compassOn = true; compassDeg.textContent = '…';
+  }catch(e){ setStatus('Compass not available on this device.'); }
+});
+
+// ---------- Voice guidance + haptics + step highlighting ----------
+let voiceEnabled = false;
+const voiceBtn = document.getElementById('voiceBtn');
+voiceBtn.addEventListener('click', () => {
+  voiceEnabled = !voiceEnabled;
+  voiceBtn.classList.toggle('active', voiceEnabled);
+  voiceBtn.querySelector('.tbl-icon').textContent = voiceEnabled ? '🔊' : '🔇';
+});
+
+// ---------- Selectable voice language (#25) ----------
+let voiceLangCode = localStorage.getItem('maporb-voicelang') || '';
+function populateVoiceLangPicker(){
+  const voices = window.speechSynthesis ? window.speechSynthesis.getVoices() : [];
+  const list = document.getElementById('voiceLangPickerList');
+  if(!voices.length){ list.innerHTML = '<div class="step-item">No voices available yet — try again in a moment.</div>'; return; }
+  const opts = [{lang:'', name:'Device default'}, ...voices.map(v => ({lang:v.lang, name:`${v.name} (${v.lang})`}))];
+  list.innerHTML = opts.map(o => `<div class="step-item${o.lang===voiceLangCode?' current':''}" data-lang="${o.lang}">${o.name}</div>`).join('');
+  list.querySelectorAll('.step-item').forEach(el => {
+    el.addEventListener('click', () => {
+      voiceLangCode = el.dataset.lang;
+      localStorage.setItem('maporb-voicelang', voiceLangCode);
+      document.getElementById('voiceLangPicker').classList.remove('show');
+    });
+  });
+}
+document.getElementById('voiceLangBtn').addEventListener('click', () => {
+  const panel = document.getElementById('voiceLangPicker');
+  panel.classList.toggle('show');
+  if(panel.classList.contains('show')) populateVoiceLangPicker();
+});
+if(window.speechSynthesis) window.speechSynthesis.onvoiceschanged = () => {};
+
+function speak(text){
+  if(!voiceEnabled || !window.speechSynthesis) return;
+  window.speechSynthesis.cancel();
+  const utt = new SpeechSynthesisUtterance(text);
+  if(voiceLangCode) utt.lang = voiceLangCode;
+  window.speechSynthesis.speak(utt);
+}
+
+// ---------- Custom alert tones (#26) ----------
+const tonePresets = ['beep', 'chime', 'none'];
+const toneLabels = {beep:'Beep', chime:'Chime', none:'Off'};
+let alertTone = localStorage.getItem('maporb-tone') || 'beep';
+document.getElementById('toneLabel').textContent = toneLabels[alertTone];
+document.getElementById('toneBtn').addEventListener('click', () => {
+  alertTone = tonePresets[(tonePresets.indexOf(alertTone)+1) % tonePresets.length];
+  localStorage.setItem('maporb-tone', alertTone);
+  document.getElementById('toneLabel').textContent = toneLabels[alertTone];
+});
+let audioCtx = null;
+function playAlertTone(){
+  if(alertTone === 'none') return;
+  try{
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    const now = audioCtx.currentTime;
+    const notes = alertTone === 'chime' ? [880, 1174] : [660];
+    notes.forEach((freq, i) => {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.15, now + i*0.15);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + i*0.15 + 0.2);
+      osc.connect(gain); gain.connect(audioCtx.destination);
+      osc.start(now + i*0.15); osc.stop(now + i*0.15 + 0.2);
+    });
+  }catch(e){}
+}
+
+let routeStepPoints = [];
+let nextStepIdx = 0;
+function highlightStep(idx){
+  document.querySelectorAll('.step-item').forEach(el => el.classList.toggle('current', +el.dataset.idx === idx));
+}
+// ---------- Focus mode (#27) — MapOrb has no way to toggle the phone's OS-level Do Not
+// Disturb (no web API grants that); this mutes the app's own voice/tone/vibration instead.
+let focusModeOn = localStorage.getItem('maporb-focusmode') === '1';
+document.getElementById('focusModeBtn').classList.toggle('active', focusModeOn);
+document.getElementById('focusModeBtn').addEventListener('click', () => {
+  focusModeOn = !focusModeOn;
+  localStorage.setItem('maporb-focusmode', focusModeOn ? '1' : '0');
+  document.getElementById('focusModeBtn').classList.toggle('active', focusModeOn);
+  setStatus(focusModeOn ? 'Focus mode on — MapOrb will stay quiet (this app only, not phone-wide DND).' : 'Focus mode off.');
+});
+
+function checkStepAdvance(pos){
+  if(nextStepIdx >= routeStepPoints.length) return;
+  const step = routeStepPoints[nextStepIdx];
+  const d = haversine(pos, [step.lat, step.lon]) * 1000;
+  if(d < 40){
+    if(!focusModeOn){
+      speak(step.text);
+      playAlertTone();
+      if(navigator.vibrate) navigator.vibrate(200);
+    }
+    highlightStep(nextStepIdx);
+    nextStepIdx++;
+  }
+}
+
+// ---------- Turn-by-turn instruction text ----------
+function maneuverText(step){
+  const type = step.maneuver.type;
+  const modifier = step.maneuver.modifier;
+  const name = step.name ? ` onto ${step.name}` : '';
+  if(type === 'depart') return `Head out${name}`;
+  if(type === 'arrive') return 'Arrive at your destination';
+  if(type === 'roundabout') return `Enter the roundabout${name}`;
+  const dir = modifier || '';
+  return `${type === 'turn' ? 'Turn' : type.charAt(0).toUpperCase()+type.slice(1)} ${dir}${name}`.trim();
+}
+
+// ---------- Elevation profile (Open-Elevation, free, no key) ----------
+async function loadElevationProfile(coords){
+  const panel = document.getElementById('elevPanel');
+  if(profile === 'driving' || coords.length < 2){ panel.classList.remove('show'); return; }
+  const step = Math.max(1, Math.floor(coords.length / 20));
+  const sampled = coords.filter((_,i) => i % step === 0).slice(0,20);
+  try{
+    const res = await fetchWithRetry('https://api.open-elevation.com/api/v1/lookup', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({locations: sampled.map(c => ({latitude:c[1], longitude:c[0]}))})
+    }, 1, 500);
+    const data = await res.json();
+    const elevs = data.results.map(r => r.elevation);
+    const min = Math.min(...elevs), max = Math.max(...elevs);
+    let ascent = 0;
+    for(let i=1;i<elevs.length;i++) if(elevs[i] > elevs[i-1]) ascent += elevs[i]-elevs[i-1];
+    const svg = document.getElementById('elevSvg');
+    const w=300,h=60, range = Math.max(1, max-min);
+    const pts = elevs.map((e,i) => `${(i/(elevs.length-1))*w},${h - ((e-min)/range)*h}`).join(' ');
+    svg.innerHTML = `<polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="2"/>`;
+    document.getElementById('elevStats').textContent = `Min ${Math.round(min)} m · Max ${Math.round(max)} m · Ascent ~${Math.round(ascent)} m`;
+    panel.classList.add('show');
+  }catch(e){ panel.classList.remove('show'); }
+}
+
+// ---------- Route rendering (supports alternatives) ----------
+let currentRoutes = [];
+let selectedRouteIdx = 0;
+function renderRouteAlternatives(){
+  const wrap = document.getElementById('routeAlts');
+  if(currentRoutes.length < 2){ wrap.classList.remove('show'); wrap.innerHTML=''; document.getElementById('comparePanel').classList.remove('show'); return; }
+  wrap.innerHTML = currentRoutes.map((r,i) => `<div class="chip${i===selectedRouteIdx?' active':''}" data-idx="${i}">Route ${i+1} · ${formatDistance(r.distance)}</div>`).join('')
+    + `<div class="chip" id="compareToggleChip">📊 Compare</div>`;
+  wrap.classList.add('show');
+  wrap.querySelectorAll('.chip[data-idx]').forEach(el => el.addEventListener('click', () => { selectedRouteIdx = +el.dataset.idx; displaySelectedRoute(); }));
+  document.getElementById('compareToggleChip').addEventListener('click', () => document.getElementById('comparePanel').classList.toggle('show'));
+}
+function renderCompareTable(){
+  if(currentRoutes.length < 2) return;
+  const rows = currentRoutes.map((r,i) => `<tr><td>${i===selectedRouteIdx?'▶ ':''}Route ${i+1}</td><td>${formatDistance(r.distance)}</td><td>${Math.round(r.duration/60)} min</td></tr>`).join('');
+  document.getElementById('compareTable').innerHTML = `<tr><th>Route</th><th>Distance</th><th>Time</th></tr>${rows}`;
+}
+function displaySelectedRoute(){
+  const route = currentRoutes[selectedRouteIdx];
+  if(!route) return;
+  if(routeLine) map.removeLayer(routeLine);
+  const latlngs = route.geometry.coordinates.map(c => [c[1], c[0]]);
+  routeLine = L.polyline(latlngs, {color:document.getElementById('routeColor').value, weight:5}).addTo(map);
+  map.fitBounds(routeLine.getBounds(), {padding:[30,30]});
+
+  lastDistanceMeters = route.distance; lastDurationSeconds = route.duration;
+  renderRouteStats();
+  document.getElementById('routeInfo').classList.add('show');
+  renderRouteAlternatives();
+  renderCompareTable();
+
+  const steps = (route.legs[0] && route.legs[0].steps) || [];
+  routeStepPoints = steps.map(s => ({lat:s.maneuver.location[1], lon:s.maneuver.location[0], text:maneuverText(s)}));
+  nextStepIdx = 0;
+  const stepsList = document.getElementById('stepsList');
+  // Lane guidance (#43): OSRM sometimes includes intersections[].lanes when the
+  // underlying OSM data has turn:lanes tagged — coverage is sparse, so this only
+  // shows up where that data exists and stays silent everywhere else.
+  function laneHtml(step){
+    const inter = step.intersections && step.intersections[0];
+    if(!inter || !inter.lanes) return '';
+    const arrows = {left:'⬅️', slight_left:'↖️', straight:'⬆️', slight_right:'↗️', right:'➡️', uturn:'↩️'};
+    const lanesHtml = inter.lanes.map(l => {
+      const ind = (l.indications && l.indications[0]) || 'straight';
+      return `<span style="opacity:${l.valid ? 1 : .35}">${arrows[ind] || '⬆️'}</span>`;
+    }).join(' ');
+    return `<div style="margin-top:2px;">${lanesHtml}</div>`;
+  }
+  stepsList.innerHTML = steps.map((s,i) => `<div class="step-item" data-idx="${i}">${i+1}. ${maneuverText(s)} <span>(${formatDistance(s.distance)})</span>${laneHtml(s)}</div>`).join('');
+  stepsList.querySelectorAll('.step-item').forEach(el => {
+    el.addEventListener('click', () => {
+      const pt = routeStepPoints[+el.dataset.idx];
+      map.setView([pt.lat, pt.lon], 17);
+      const flash = L.circleMarker([pt.lat, pt.lon], {radius:12, color:'#ff9800', weight:3, fillOpacity:0}).addTo(map);
+      setTimeout(() => map.removeLayer(flash), 1500);
+    });
+  });
+  document.getElementById('stepsPanel').classList.add('show');
+  if(voiceEnabled && routeStepPoints.length) speak(routeStepPoints[0].text);
+  loadElevationProfile(latlngs.map(c => [c[1], c[0]]));
+  upgradeEtaWithDestinationTimezone();
+}
+
+// ---------- Routing (OSRM public demo server, free, no key) ----------
+async function handleGo(isReroute){
+  if(!fromCoords || !toCoords){ setStatus('Pick both a start and a destination from the suggestions.'); return; }
+  if(!isReroute) setStatus('Finding route…', true);
+  try{
+    const stopCoords = waypoints.filter(w => w.coords).map(w => w.coords);
+    const allPoints = [fromCoords, ...stopCoords, toCoords];
+    const coordsStr = allPoints.map(c => `${c[1]},${c[0]}`).join(';');
+    const alt = stopCoords.length ? 'false' : 'true'; // OSRM alternatives are only valid for a single leg
+    let url = `https://router.project-osrm.org/route/v1/${profile}/${coordsStr}?overview=full&geometries=geojson&steps=true&alternatives=${alt}`;
+    if(avoidSet.size) url += `&exclude=${[...avoidSet].join(',')}`;
+    let res = await fetchWithRetry(url);
+    let data = await res.json();
+    let fallbackNote = '';
+    if(data.code !== 'Ok' && avoidSet.size){
+      // demo server may not support this exclude class — retry without it
+      const plainUrl = url.replace(/&exclude=[^&]*/, '');
+      res = await fetchWithRetry(plainUrl);
+      data = await res.json();
+      if(data.code === 'Ok') fallbackNote = 'Avoid-option not supported by the free routing server — showing the normal route.';
+    }
+    if(data.code !== 'Ok' || !data.routes.length){ if(!isReroute) setStatus('No route found.'); return; }
+    currentRoutes = data.routes; selectedRouteIdx = 0;
+    displaySelectedRoute();
+    if(isReroute){
+      fallbackNote = '🔁 Rerouted — you left the planned route.';
+    } else {
+      logTrip(currentRoutes[0]);
+      if(currentRoutes[0].distance > 100000) fallbackNote = (fallbackNote ? fallbackNote+' · ' : '') + '💡 Long trip — tap 🔍 for rest-stop suggestions along the way.';
+    }
+    setStatus(fallbackNote);
+  }catch(e){
+    if(!isReroute) setStatus('Routing service unavailable after retries. Try again shortly.');
+  }
+}
+document.getElementById('goBtn').addEventListener('click', () => handleGo(false));
+
+document.getElementById('stepsHeader').addEventListener('click', () => {
+  document.getElementById('stepsList').classList.toggle('open');
+  const caret = document.getElementById('stepsCaret');
+  caret.textContent = document.getElementById('stepsList').classList.contains('open') ? '▴' : '▾';
+});
+
+document.getElementById('clearBtn').addEventListener('click', () => {
+  if(routeLine) map.removeLayer(routeLine);
+  if(fromMarker) map.removeLayer(fromMarker);
+  if(toMarker) map.removeLayer(toMarker);
+  routeLine=fromMarker=toMarker=null;
+  fromCoords=toCoords=null;
+  fromInput.value=''; toInput.value='';
+  waypoints.forEach(w => { if(w.marker) map.removeLayer(w.marker); w.row && w.row.remove(); });
+  document.getElementById('waypointsList').innerHTML = ''; waypoints = [];
+  document.getElementById('routeInfo').classList.remove('show');
+  document.getElementById('stepsPanel').classList.remove('show');
+  document.getElementById('elevPanel').classList.remove('show');
+  document.getElementById('routeAlts').classList.remove('show');
+  document.getElementById('comparePanel').classList.remove('show');
+  currentRoutes=[]; routeStepPoints = []; nextStepIdx = 0; lastDistanceMeters=null;
+  setStatus('');
+});
+
+// ---------- Route color picker (live re-color) ----------
+document.getElementById('routeColor').addEventListener('input', (e) => {
+  if(routeLine) routeLine.setStyle({color:e.target.value});
+});
+
+// ---------- Colorblind-friendly palette presets (#24) ----------
+const colorPresets = [
+  {name:'Default blue', color:'#4f8cff'},
+  {name:'High-contrast orange', color:'#e67e22'},
+  {name:'Deuteranopia-safe blue/yellow', color:'#0072B2'},
+  {name:'Protanopia-safe teal', color:'#009E73'},
+  {name:'Tritanopia-safe magenta', color:'#CC79A7'},
+  {name:'Max contrast black', color:'#000000'}
+];
+document.getElementById('paletteBtn').addEventListener('click', () => {
+  const panel = document.getElementById('palettePicker');
+  panel.classList.toggle('show');
+  if(!panel.classList.contains('show')) return;
+  const cur = document.getElementById('routeColor').value;
+  document.getElementById('palettePickerList').innerHTML = colorPresets.map(p =>
+    `<div class="step-item${p.color.toLowerCase()===cur.toLowerCase()?' current':''}" data-color="${p.color}">
+      <span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${p.color};margin-right:6px;vertical-align:middle;"></span>${p.name}
+    </div>`).join('');
+  document.querySelectorAll('#palettePickerList .step-item').forEach(el => {
+    el.addEventListener('click', () => {
+      const c = el.dataset.color;
+      document.getElementById('routeColor').value = c;
+      if(routeLine) routeLine.setStyle({color:c});
+      panel.classList.remove('show');
+    });
+  });
+});
+
+// ---------- Share route (URL params) ----------
+document.getElementById('shareBtn').addEventListener('click', async () => {
+  if(!fromCoords || !toCoords){ setStatus('Set a start and destination first.'); return; }
+  const url = `${location.origin}${location.pathname}?from=${fromCoords[0]},${fromCoords[1]}&to=${toCoords[0]},${toCoords[1]}&profile=${profile}`;
+  if(navigator.share){ try{ await navigator.share({title:'MapOrb route', url}); return; }catch(e){} }
+  try{ await navigator.clipboard.writeText(url); setStatus('Route link copied to clipboard.'); }
+  catch(e){ setStatus(url); }
+});
+(async function loadFromShareLink(){
+  const params = new URLSearchParams(location.search);
+  if(!params.has('from') || !params.has('to')) return;
+  try{
+    const [flat,flon] = params.get('from').split(',').map(Number);
+    const [tlat,tlon] = params.get('to').split(',').map(Number);
+    if(params.get('profile')){ profile = params.get('profile'); document.querySelectorAll('#profileToggle button').forEach(b => b.classList.toggle('active', b.dataset.profile===profile)); }
+    setPoint('from', {lat:flat, lon:flon}); setPoint('to', {lat:tlat, lon:tlon});
+    fromInput.value = await reverseGeocode(flat, flon);
+    toInput.value = await reverseGeocode(tlat, tlon);
+    handleGo();
+  }catch(e){ /* ignore malformed share link */ }
+})();
+
+document.addEventListener('click', (e) => {
+  if(!fromSuggest.contains(e.target) && e.target !== fromInput) fromSuggest.style.display='none';
+  if(!toSuggest.contains(e.target) && e.target !== toInput) toSuggest.style.display='none';
+});
+
+// ---------- Privacy note ----------
+document.getElementById('privacyToggle').addEventListener('click', () => {
+  document.getElementById('privacyNote').classList.toggle('open');
+});
+
+// ---------- Distance measurement (straight-line, tap-to-add draggable points) ----------
+let measuring = false;
+let measurePoints = [];
+let measureMarkers = [];
+let measureLine = null;
+const measureBtn = document.getElementById('measureBtn');
+const measureInfo = document.getElementById('measureInfo');
+const measurePtsEl = document.getElementById('measurePts');
+const measureDistEl = document.getElementById('measureDist');
+
+function haversine(a, b){
+  const R = 6371;
+  const toRad = d => d * Math.PI / 180;
+  const dLat = toRad(b[0]-a[0]);
+  const dLon = toRad(b[1]-a[1]);
+  const lat1 = toRad(a[0]), lat2 = toRad(b[0]);
+  const h = Math.sin(dLat/2)**2 + Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLon/2)**2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+function updateMeasureUI(){
+  measurePtsEl.textContent = measurePoints.length;
+  let totalKm = 0;
+  for(let i=1; i<measurePoints.length; i++) totalKm += haversine(measurePoints[i-1], measurePoints[i]);
+  measureDistEl.textContent = formatDistance(totalKm*1000);
+  measureInfo.classList.toggle('show', measurePoints.length > 0);
+}
+function toggleMeasure(on){
+  measuring = on;
+  measureBtn.classList.toggle('active', on);
+  mapEl.classList.toggle('measuring', on);
+  if(on){ tapMode = null; tapSetBtn.querySelector('.tbl-icon').textContent = tapIcons[null]; tapSetBtn.title = tapTitles[null]; tapSetBtn.classList.remove('active'); mapEl.classList.remove('tapping'); }
+  setStatus(on ? 'Tap the map to add measurement points.' : '');
+}
+measureBtn.addEventListener('click', () => toggleMeasure(!measuring));
+
+const measureIcon = L.divIcon({
+  className: 'measure-pin',
+  html: '<div style="width:16px;height:16px;border-radius:50%;background:#ff9800;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4);"></div>',
+  iconSize:[16,16], iconAnchor:[8,8]
+});
+function redrawMeasureLine(){
+  if(measureLine) map.removeLayer(measureLine);
+  measureLine = measurePoints.length > 1 ? L.polyline(measurePoints, {color:'#ff9800', weight:4, dashArray:'6,6'}).addTo(map) : null;
+}
+
+map.on('click', async (e) => {
+  const pt = [e.latlng.lat, e.latlng.lng];
+  if(measuring){
+    const idx = measurePoints.length;
+    measurePoints.push(pt);
+    const marker = L.marker(pt, {icon: measureIcon, draggable:true}).addTo(map);
+    marker.on('drag', (ev) => {
+      const ll = ev.target.getLatLng();
+      measurePoints[idx] = [ll.lat, ll.lng];
+      redrawMeasureLine(); updateMeasureUI();
+    });
+    measureMarkers.push(marker);
+    redrawMeasureLine(); updateMeasureUI();
+    return;
+  }
+  if(tapMode){
+    setStatus('Finding address…', true);
+    const addr = await reverseGeocode(pt[0], pt[1]);
+    if(tapMode === 'from'){ fromInput.value = addr; setPoint('from', {lat:pt[0], lon:pt[1]}); }
+    else { toInput.value = addr; setPoint('to', {lat:pt[0], lon:pt[1]}); }
+    setStatus('');
+  }
+});
+
+document.getElementById('measureClearBtn').addEventListener('click', () => {
+  measurePoints = [];
+  measureMarkers.forEach(m => map.removeLayer(m));
+  measureMarkers = [];
+  if(measureLine) map.removeLayer(measureLine);
+  measureLine = null;
+  updateMeasureUI();
+});
+
+// ---------- Wake Lock (keep screen on) ----------
+let wakeLock = null;
+const wakeLockBtn = document.getElementById('wakeLockBtn');
+async function releaseWakeLock(){ if(wakeLock){ try{ await wakeLock.release(); }catch(e){} wakeLock=null; } }
+wakeLockBtn.addEventListener('click', async () => {
+  if(!('wakeLock' in navigator)){ setStatus('Wake Lock not supported on this browser.'); return; }
+  if(wakeLock){ await releaseWakeLock(); wakeLockBtn.classList.remove('active'); wakeLockBtn.title = 'Keep screen on'; return; }
+  try{
+    wakeLock = await navigator.wakeLock.request('screen');
+    wakeLockBtn.classList.add('active'); wakeLockBtn.title = 'Screen staying on (tap to release)';
+    wakeLock.addEventListener('release', () => { wakeLockBtn.classList.remove('active'); wakeLockBtn.title = 'Keep screen on'; wakeLock=null; });
+  }catch(e){ setStatus('Could not keep screen on.'); }
+});
+document.addEventListener('visibilitychange', async () => {
+  if(document.visibilityState === 'visible' && wakeLockBtn.classList.contains('active') && !wakeLock){
+    try{ wakeLock = await navigator.wakeLock.request('screen'); }catch(e){}
+  }
+});
+
+// ---------- Auto dark/light theme by local sunrise & sunset (#28) ----------
+// Computed client-side (reuses the same solar formula as the day/night overlay) — no network call needed.
+function computeSunTimes(lat, lon, date){
+  const rad = Math.PI/180;
+  const start = Date.UTC(date.getUTCFullYear(),0,1);
+  const dayOfYear = Math.floor((date - start)/86400000) + 1;
+  const dec = -23.44 * Math.cos(rad*(360/365*(dayOfYear+10)));
+  const decRad = dec*rad, latRad = lat*rad;
+  const cosH = -Math.tan(latRad)*Math.tan(decRad);
+  if(cosH > 1 || cosH < -1) return {sunrise:null, sunset:null}; // polar day/night
+  const hourAngle = Math.acos(cosH)/rad;
+  const solarNoonUTC = 12 - lon/15;
+  const toDate = (h) => { const d = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate())); d.setTime(d.getTime() + h*3600000); return d; };
+  return {sunrise:toDate(solarNoonUTC - hourAngle/15), sunset:toDate(solarNoonUTC + hourAngle/15)};
+}
+let autoThemeOn = localStorage.getItem('maporb-autotheme') === '1';
+let autoThemeInterval = null;
+function runAutoTheme(){
+  const pos = lastKnownPos || fromCoords || toCoords;
+  if(!pos){ setStatus('Auto theme needs a known location — tap 📍 or enable Live tracking once.'); return; }
+  const {sunrise, sunset} = computeSunTimes(pos[0], pos[1], new Date());
+  if(!sunrise || !sunset) return; // polar day/night — leave theme as-is
+  const now = new Date();
+  const isDay = now >= sunrise && now < sunset;
+  applyTheme(isDay ? 'light' : 'dark');
+  syncMapLayerToTheme();
+}
+document.getElementById('autoThemeBtn').addEventListener('click', () => {
+  autoThemeOn = !autoThemeOn;
+  localStorage.setItem('maporb-autotheme', autoThemeOn ? '1' : '0');
+  document.getElementById('autoThemeBtn').classList.toggle('active', autoThemeOn);
+  if(autoThemeOn){ runAutoTheme(); autoThemeInterval = setInterval(runAutoTheme, 10*60*1000); }
+  else if(autoThemeInterval){ clearInterval(autoThemeInterval); autoThemeInterval = null; }
+});
+if(autoThemeOn){ document.getElementById('autoThemeBtn').classList.add('active'); runAutoTheme(); autoThemeInterval = setInterval(runAutoTheme, 10*60*1000); }
+
+// ---------- Battery saver mode (#29) ----------
+let batterySaverOn = localStorage.getItem('maporb-battersaver') === '1';
+function applyBatterySaverUI(){
+  document.getElementById('batterySaverBtn').classList.toggle('active', batterySaverOn);
+  mapEl.classList.toggle('battery-dim', batterySaverOn);
+}
+document.getElementById('batterySaverBtn').addEventListener('click', () => {
+  batterySaverOn = !batterySaverOn;
+  localStorage.setItem('maporb-battersaver', batterySaverOn ? '1' : '0');
+  applyBatterySaverUI();
+  setStatus(batterySaverOn ? 'Battery saver on — GPS updates less often, map dimmed. Restart live tracking to apply.' : 'Battery saver off.');
+});
+applyBatterySaverUI();
+
+// ---------- Large / elderly-friendly mode (#22) ----------
+let largeModeOn = localStorage.getItem('maporb-largemode') === '1';
+function applyLargeMode(){
+  document.body.classList.toggle('large-mode', largeModeOn);
+  document.documentElement.classList.toggle('large-mode', largeModeOn);
+  document.getElementById('largeModeBtn').classList.toggle('active', largeModeOn);
+}
+document.getElementById('largeModeBtn').addEventListener('click', () => {
+  largeModeOn = !largeModeOn;
+  localStorage.setItem('maporb-largemode', largeModeOn ? '1' : '0');
+  applyLargeMode();
+});
+applyLargeMode();
+
+// ---------- Kids mode (#23) — hides advanced tools behind a simple PIN ----------
+let kidsModeOn = false;
+document.getElementById('kidsModeBtn').addEventListener('click', () => {
+  if(!kidsModeOn){
+    const pin = prompt('Set a 4-digit PIN to exit Kids Mode later:', '');
+    if(!pin) return;
+    localStorage.setItem('maporb-kidspin', pin);
+    kidsModeOn = true;
+  } else {
+    const entered = prompt('Enter your PIN to exit Kids Mode:');
+    if(entered !== localStorage.getItem('maporb-kidspin')){ setStatus('Incorrect PIN.'); return; }
+    kidsModeOn = false;
+  }
+  document.body.classList.toggle('kids-mode', kidsModeOn);
+  document.getElementById('kidsModeBtn').classList.toggle('active', kidsModeOn);
+});
+
+// ---------- Live speed readout + trip odometer ----------
+const speedBadge = document.getElementById('speedBadge');
+let tripMeters = 0;
+let lastSpeedText = '– km/h';
+let prevTrackPos = null;
+speedBadge.title = 'Tap to reset trip odometer';
+function renderSpeedBadge(){
+  speedBadge.innerHTML = `${lastSpeedText}<br><span id="odoVal">${formatDistance(tripMeters)}</span>`;
+}
+speedBadge.addEventListener('click', () => { tripMeters = 0; renderSpeedBadge(); });
+function updateSpeedAndOdometer(pos, speedMs){
+  if(prevTrackPos) tripMeters += haversine(prevTrackPos, pos) * 1000;
+  prevTrackPos = pos;
+  lastSpeedText = (typeof speedMs === 'number' && speedMs >= 0)
+    ? (units === 'mi' ? `${(speedMs*2.23694).toFixed(1)} mph` : `${(speedMs*3.6).toFixed(1)} km/h`)
+    : '– km/h';
+  renderSpeedBadge();
+  speedBadge.classList.add('show');
+}
+
+// ---------- Nearby POI search (Overpass API, free, no key) + open-now filter (#39) ----------
+let poiLayer = L.layerGroup().addTo(map);
+let filterOpenNow = false;
+document.getElementById('poiBtn').addEventListener('click', () => {
+  document.getElementById('poiChips').classList.toggle('show');
+});
+document.getElementById('openNowChip').addEventListener('click', () => {
+  filterOpenNow = !filterOpenNow;
+  document.getElementById('openNowChip').classList.toggle('active', filterOpenNow);
+  setStatus(filterOpenNow ? 'Open-now filter on for your next nearby search (partial OSM data coverage).' : 'Open-now filter off.');
+});
+// Best-effort OSM opening_hours parser — covers common "Mo-Fr 09:00-18:00; Sa 10:00-14:00" style
+// patterns and "24/7". Returns true/false when it can determine status, or null if unparseable/missing.
+function isOpenNow(spec, now){
+  if(!spec) return null;
+  if(/24\/7/i.test(spec)) return true;
+  const dayCodes = ['Su','Mo','Tu','We','Th','Fr','Sa'];
+  const today = dayCodes[now.getDay()];
+  const curMin = now.getHours()*60 + now.getMinutes();
+  try{
+    const rules = spec.split(';').map(r => r.trim()).filter(Boolean);
+    for(const rule of rules){
+      const m = rule.match(/^([A-Za-z,\-]+)\s+(.+)$/);
+      if(!m) continue;
+      const [, daysPart, timesPart] = m;
+      let daysMatch = false;
+      for(const part of daysPart.split(',')){
+        if(part.includes('-')){
+          const [a,b] = part.split('-');
+          const ai = dayCodes.indexOf(a), bi = dayCodes.indexOf(b);
+          if(ai<0||bi<0) continue;
+          const todayIdx = dayCodes.indexOf(today);
+          daysMatch = daysMatch || (ai<=bi ? (todayIdx>=ai && todayIdx<=bi) : (todayIdx>=ai || todayIdx<=bi));
+        } else if(part === today){ daysMatch = true; }
+      }
+      if(!daysMatch) continue;
+      for(const timeRange of timesPart.split(',')){
+        const tm = timeRange.match(/(\d{2}):(\d{2})-(\d{2}):(\d{2})/);
+        if(!tm) continue;
+        const start = (+tm[1])*60+(+tm[2]), end = (+tm[3])*60+(+tm[4]);
+        if(end >= start ? (curMin>=start && curMin<=end) : (curMin>=start || curMin<=end)) return true;
+      }
+      return false; // day matched but no time range matched
+    }
+    return false;
+  }catch(e){ return null; }
+}
+document.querySelectorAll('#poiChips .chip[data-amenity]').forEach(chip => {
+  chip.addEventListener('click', async () => {
+    const amenity = chip.dataset.amenity;
+    const center = lastKnownPos || fromCoords || map.getCenter() && [map.getCenter().lat, map.getCenter().lng];
+    if(!center){ setStatus('Set a location first.'); return; }
+    setStatus('Finding nearby places…', true);
+    poiLayer.clearLayers();
+    try{
+      const query = `[out:json][timeout:15];node["amenity"="${amenity}"](around:1500,${center[0]},${center[1]});out 20;`;
+      const res = await fetchWithRetry('https://overpass-api.de/api/interpreter', {method:'POST', body: query}, 1, 700);
+      const data = await res.json();
+      let elements = data.elements;
+      if(!elements.length){ setStatus('No nearby places found.'); return; }
+      if(filterOpenNow){
+        const now = new Date();
+        elements = elements.filter(el => isOpenNow(el.tags && el.tags.opening_hours, now) !== false);
+      }
+      if(!elements.length){ setStatus('No open places found nearby right now (or hours unknown).'); return; }
+      elements.forEach(el => {
+        const name = (el.tags && el.tags.name) || amenity;
+        const status = isOpenNow(el.tags && el.tags.opening_hours, new Date());
+        const badge = status === true ? '🟢 Open now' : status === false ? '🔴 Closed now' : '⚪ Hours unknown';
+        L.marker([el.lat, el.lon]).bindPopup(`${name}<br><small>${badge}</small>`).addTo(poiLayer);
+      });
+      map.fitBounds(L.featureGroup(poiLayer.getLayers()).getBounds(), {padding:[40,40]});
+      setStatus(`Found ${elements.length} nearby ${amenity}.`);
+    }catch(e){ setStatus('Nearby search unavailable right now.'); }
+  });
+});
+
+// ---------- Weather + sunrise/sunset at destination (Open-Meteo, free, no key) ----------
+document.getElementById('weatherBtn').addEventListener('click', async () => {
+  const target = toCoords || fromCoords || lastKnownPos;
+  const weatherStatus = document.getElementById('weatherStatus');
+  if(!target){ setStatus('Set a destination first.'); return; }
+  weatherStatus.textContent = 'Loading weather…';
+  try{
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${target[0]}&longitude=${target[1]}&current=temperature_2m,weather_code&daily=sunrise,sunset&timezone=auto`;
+    const res = await fetchWithRetry(url);
+    const data = await res.json();
+    const temp = Math.round(data.current.temperature_2m);
+    const sunrise = new Date(data.daily.sunrise[0]).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+    const sunset = new Date(data.daily.sunset[0]).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+    weatherStatus.textContent = `🌡️ ${temp}°C at destination · 🌅 ${sunrise} · 🌇 ${sunset}`;
+  }catch(e){ weatherStatus.textContent = 'Weather unavailable right now.'; }
+});
+
+// ---------- GPX / KML import ----------
+document.getElementById('importBtn').addEventListener('click', () => document.getElementById('importFile').click());
+document.getElementById('importFile').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if(!file) return;
+  const text = await file.text();
+  const xml = new DOMParser().parseFromString(text, 'application/xml');
+  let coords = [];
+  if(file.name.toLowerCase().endsWith('.gpx')){
+    coords = [...xml.querySelectorAll('trkpt, rtept')].map(pt => [parseFloat(pt.getAttribute('lat')), parseFloat(pt.getAttribute('lon'))]);
+  } else {
+    const coordText = xml.querySelector('coordinates');
+    if(coordText) coords = coordText.textContent.trim().split(/\s+/).map(pair => { const [lon,lat] = pair.split(',').map(Number); return [lat,lon]; });
+  }
+  if(!coords.length){ setStatus('Could not read any track points from that file.'); return; }
+  if(routeLine) map.removeLayer(routeLine);
+  routeLine = L.polyline(coords, {color:document.getElementById('routeColor').value, weight:5}).addTo(map);
+  map.fitBounds(routeLine.getBounds(), {padding:[30,30]});
+  let meters = 0;
+  for(let i=1;i<coords.length;i++) meters += haversine(coords[i-1], coords[i]) * 1000;
+  lastDistanceMeters = meters; lastDurationSeconds = 0;
+  document.getElementById('distVal').textContent = formatDistance(meters);
+  document.getElementById('timeVal').textContent = 'Imported track';
+  document.getElementById('routeInfo').classList.add('show');
+  document.getElementById('stepsPanel').classList.remove('show');
+  document.getElementById('elevPanel').classList.remove('show');
+  currentRoutes = []; document.getElementById('routeAlts').classList.remove('show');
+  setStatus(`Imported ${file.name} (${formatDistance(meters)}).`);
+  e.target.value = '';
+});
+
+// ---------- GPX export ----------
+document.getElementById('exportBtn').addEventListener('click', () => {
+  if(!routeLine){ setStatus('No route to export yet.'); return; }
+  const pts = routeLine.getLatLngs();
+  const trkpts = pts.map(p => `<trkpt lat="${p.lat}" lon="${p.lng}"></trkpt>`).join('\n      ');
+  const gpx = `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="MapOrb" xmlns="http://www.topografix.com/GPX/1/1">\n  <trk><name>MapOrb route</name><trkseg>\n      ${trkpts}\n  </trkseg></trk>\n</gpx>`;
+  const blob = new Blob([gpx], {type:'application/gpx+xml'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'maporb-route.gpx';
+  document.body.appendChild(a); a.click(); a.remove();
+});
+
+// ---------- Trip history + diary notes (#9, #10) ----------
+function getHistory(){ try{ return JSON.parse(localStorage.getItem('maporb-triphistory')||'[]'); }catch(e){ return []; } }
+function decimate(latlngs, maxPts){
+  const step = Math.max(1, Math.floor(latlngs.length / maxPts));
+  return latlngs.filter((_,i) => i % step === 0);
+}
+function logTrip(route){
+  const list = getHistory();
+  const path = decimate(route.geometry.coordinates.map(c => [c[1], c[0]]), 80);
+  list.unshift({date:new Date().toISOString(), distance:route.distance, duration:route.duration, note:'', path});
+  localStorage.setItem('maporb-triphistory', JSON.stringify(list.slice(0,25)));
+}
+let replayMarker = null, replayTimer = null;
+function replayTrip(path){
+  if(!path || !path.length){ setStatus('No saved path for this older trip — replay only works for trips logged after this update.'); return; }
+  if(replayTimer) clearInterval(replayTimer);
+  if(replayMarker) map.removeLayer(replayMarker);
+  const replayLine = L.polyline(path, {color:'#ff9800', weight:4, dashArray:'2,6'}).addTo(map);
+  map.fitBounds(replayLine.getBounds(), {padding:[30,30]});
+  replayMarker = L.circleMarker(path[0], {radius:8, color:'#ff9800', fillColor:'#ff9800', fillOpacity:1}).addTo(map);
+  let i = 0;
+  setStatus('▶ Replaying trip…');
+  replayTimer = setInterval(() => {
+    i++;
+    if(i >= path.length){
+      clearInterval(replayTimer); replayTimer = null;
+      map.removeLayer(replayLine);
+      setStatus('Replay finished.');
+      return;
+    }
+    replayMarker.setLatLng(path[i]);
+  }, 120);
+}
+function renderHistory(){
+  const list = getHistory();
+  const el = document.getElementById('historyList');
+  if(!list.length){ el.innerHTML = '<div class="step-item">No trips logged yet — routes are saved here automatically.</div>'; return; }
+  el.innerHTML = list.map((t,i) => {
+    const d = new Date(t.date);
+    return `<div class="step-item" data-idx="${i}">${d.toLocaleDateString()} · ${formatDistance(t.distance)} · ${Math.round(t.duration/60)} min
+      <span>${t.note ? '📝 '+t.note : 'tap to add a note'}</span>
+      <span class="x" data-replay="${i}" style="float:right;color:var(--accent);margin-left:8px;cursor:pointer;">▶ Replay</span>
+      <span class="x" data-del="${i}" style="float:right;color:var(--danger);cursor:pointer;">✕</span></div>`;
+  }).join('');
+  el.querySelectorAll('.step-item[data-idx]').forEach(row => {
+    row.addEventListener('click', (e) => {
+      if(e.target.dataset.del !== undefined || e.target.dataset.replay !== undefined) return;
+      const i = +row.dataset.idx;
+      const list2 = getHistory();
+      const note = prompt('Trip note:', list2[i].note || '');
+      if(note === null) return;
+      list2[i].note = note;
+      localStorage.setItem('maporb-triphistory', JSON.stringify(list2));
+      renderHistory();
+    });
+  });
+  el.querySelectorAll('[data-replay]').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      replayTrip(getHistory()[+btn.dataset.replay].path);
+    });
+  });
+  el.querySelectorAll('[data-del]').forEach(x => {
+    x.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const list2 = getHistory(); list2.splice(+x.dataset.del, 1);
+      localStorage.setItem('maporb-triphistory', JSON.stringify(list2));
+      renderHistory();
+    });
+  });
+}
+document.getElementById('historyBtn').addEventListener('click', () => {
+  const panel = document.getElementById('historyPanel');
+  panel.classList.toggle('show');
+  if(panel.classList.contains('show')) renderHistory();
+});
+document.getElementById('historyHeader').addEventListener('click', () => {
+  const l = document.getElementById('historyList'); l.classList.toggle('open');
+  document.getElementById('historyCaret').textContent = l.classList.contains('open') ? '▴' : '▾';
+});
+
+// ---------- Go Home / Go to Work quick buttons (#14) ----------
+function getQuickPlaces(){ try{ return JSON.parse(localStorage.getItem('maporb-quickplaces')||'{}'); }catch(e){ return {}; } }
+function wireQuickPlace(btnId, key, label){
+  document.getElementById(btnId).addEventListener('click', () => {
+    const places = getQuickPlaces();
+    if(places[key]){
+      toInput.value = places[key].label; setPoint('to', {lat:places[key].lat, lon:places[key].lon});
+      setStatus(`Set ${label} as destination.`);
+    } else if(toCoords){
+      if(confirm(`Save your current destination as ${label}?`)){
+        places[key] = {lat:toCoords[0], lon:toCoords[1], label: toInput.value || label};
+        localStorage.setItem('maporb-quickplaces', JSON.stringify(places));
+        setStatus(`${label} saved.`);
+      }
+    } else {
+      setStatus(`Set a destination first, then tap this button to save it as ${label}.`);
+    }
+  });
+}
+wireQuickPlace('homeBtn', 'home', 'Home');
+wireQuickPlace('workBtn', 'work', 'Work');
+
+// ---------- Emergency SOS (#6) ----------
+const EMERGENCY_NUMBERS = { US:'911', CA:'911', MX:'911', GB:'999', IE:'999', AU:'000', NZ:'111', IN:'112', JP:'110', DEFAULT:'112' };
+document.getElementById('sosBtn').addEventListener('click', async () => {
+  const pos = lastKnownPos || fromCoords;
+  if(!confirm('This will look up your local emergency number and prepare to share your location. Continue?')) return;
+  let number = EMERGENCY_NUMBERS.DEFAULT;
+  let addr = 'location unavailable';
+  if(pos){
+    try{
+      const res = await fetchWithRetry(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${pos[0]}&lon=${pos[1]}&addressdetails=1`);
+      const data = await res.json();
+      const cc = data.address && data.address.country_code ? data.address.country_code.toUpperCase() : null;
+      number = (cc && EMERGENCY_NUMBERS[cc]) || EMERGENCY_NUMBERS.DEFAULT;
+      addr = data.display_name || addr;
+    }catch(e){}
+  }
+  setStatus(`Emergency number for your area (best guess): ${number}. Confirm it's correct before relying on it.`);
+  const mapsLink = pos ? `https://www.openstreetmap.org/?mlat=${pos[0]}&mlon=${pos[1]}#map=17/${pos[0]}/${pos[1]}` : '';
+  const msg = `I need help. My location: ${addr} ${mapsLink}`;
+  if(navigator.share){ try{ await navigator.share({title:'SOS — my location', text:msg}); }catch(e){} }
+  else { try{ await navigator.clipboard.writeText(msg); }catch(e){} }
+  window.location.href = `tel:${number}`;
+});
+
+// ---------- Share current location snapshot (#7) ----------
+document.getElementById('shareLocBtn').addEventListener('click', async () => {
+  const pos = lastKnownPos || fromCoords;
+  if(!pos){ setStatus('No known location yet — enable live tracking or use 📍.'); return; }
+  const link = `https://www.openstreetmap.org/?mlat=${pos[0]}&mlon=${pos[1]}#map=17/${pos[0]}/${pos[1]}`;
+  if(navigator.share){ try{ await navigator.share({title:'My current location', url:link}); return; }catch(e){} }
+  try{ await navigator.clipboard.writeText(link); setStatus('Location link copied (snapshot — not live).'); }
+  catch(e){ setStatus(link); }
+});
+
+// ---------- Running-late ETA share (#8) ----------
+document.getElementById('lateBtn').addEventListener('click', async () => {
+  if(lastDurationSeconds == null){ setStatus('Calculate a route first.'); return; }
+  const eta = new Date(Date.now() + lastDurationSeconds*1000).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+  const msg = `Running a bit late — new ETA is around ${eta}.`;
+  if(navigator.share){ try{ await navigator.share({title:'ETA update', text:msg}); return; }catch(e){} }
+  try{ await navigator.clipboard.writeText(msg); setStatus('ETA message copied to clipboard.'); }
+  catch(e){ setStatus(msg); }
+});
+
+// ---------- Calendar (.ics) import for destination (#15) ----------
+document.getElementById('calBtn').addEventListener('click', () => document.getElementById('calFile').click());
+document.getElementById('calFile').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if(!file) return;
+  const text = (await file.text()).replace(/\r\n[ \t]/g, ''); // unfold ICS lines
+  const match = text.match(/^LOCATION:(.+)$/m);
+  if(!match){ setStatus('No LOCATION found in that calendar file.'); e.target.value=''; return; }
+  const locText = match[1].replace(/\\,/g, ',').trim();
+  setStatus('Looking up event location…', true);
+  try{
+    const results = await geocode(locText);
+    if(!results.length){ setStatus(`Could not find "${locText}" on the map.`); return; }
+    const r = results[0];
+    toInput.value = r.display_name;
+    setPoint('to', {lat:parseFloat(r.lat), lon:parseFloat(r.lon)});
+    setStatus('Destination set from your calendar event.');
+  }catch(err){ setStatus('Could not look up that event location.'); }
+  e.target.value = '';
+});
+
+// ---------- Trip fuel/energy cost estimator (#12) ----------
+async function convertAmount(amount, fromCode, toCode){
+  if(fromCode === toCode) return amount;
+  const fromRate = await getRateTo(fromCode);
+  const toRate = await getRateTo(toCode);
+  if(!fromRate || !toRate) return null;
+  return (amount / fromRate) * toRate;
+}
+document.getElementById('fuelCostBtn').addEventListener('click', async () => {
+  if(lastDistanceMeters == null){ setStatus('Calculate a route first.'); return; }
+  const usePer100 = parseFloat(prompt('Fuel or energy use per 100 km (liters or kWh):', '7'));
+  if(!usePer100 || usePer100 <= 0) return;
+  const price = parseFloat(prompt(`Price per liter or kWh, in ${currencyCode}:`, '1.5'));
+  if(!price || price <= 0) return;
+  const km = lastDistanceMeters / 1000;
+  const cost = (km/100) * usePer100 * price;
+  let msg = `Estimated trip cost: ${cost.toFixed(2)} ${currencyCode} (${km.toFixed(1)} km at ${usePer100}/100km × ${price}).`;
+  const other = prompt('Also show this in another currency? (code, or leave blank to skip)', '');
+  if(other && other.trim()){
+    try{
+      const converted = await convertAmount(cost, currencyCode, other.trim().toUpperCase());
+      if(converted != null) msg += ` ≈ ${converted.toFixed(2)} ${other.trim().toUpperCase()}.`;
+    }catch(e){}
+  }
+  setStatus(msg);
+});
+
+// ---------- Range check — fuel/EV distance-to-empty vs route (#17, #20) ----------
+document.getElementById('rangeBtn').addEventListener('click', () => {
+  if(lastDistanceMeters == null){ setStatus('Calculate a route first.'); return; }
+  const range = parseFloat(prompt(units==='mi' ? 'Your current remaining range (miles):' : 'Your current remaining range (km):', '100'));
+  if(!range && range !== 0) return;
+  const routeDist = units==='mi' ? lastDistanceMeters/1609.34 : lastDistanceMeters/1000;
+  if(range >= routeDist){
+    setStatus(`✅ Your range covers this trip (${range} ${units} available, ${routeDist.toFixed(1)} ${units} needed).`);
+  } else {
+    setStatus(`⚠️ Short by ${(routeDist-range).toFixed(1)} ${units} — tap 🔍 › 🔋 EV charging or ⛽ Fuel to find a stop along the way.`);
+  }
+});
+
+// ---------- Trip cost splitting (#16) ----------
+document.getElementById('splitBtn').addEventListener('click', () => {
+  const total = parseFloat(prompt(`Total trip cost, in ${currencyCode}:`, '0'));
+  if(!total || total <= 0) return;
+  const people = parseInt(prompt('Split between how many people?', '2'), 10);
+  if(!people || people <= 0) return;
+  setStatus(`Each person owes ${(total/people).toFixed(2)} ${currencyCode} (${total} ÷ ${people}).`);
+});
+
+// ---------- Nearby bike lanes overlay (#21) ----------
+let bikeLaneLayer = null;
+document.getElementById('bikeLanesBtn').addEventListener('click', async () => {
+  const btn = document.getElementById('bikeLanesBtn');
+  if(bikeLaneLayer){ map.removeLayer(bikeLaneLayer); bikeLaneLayer = null; btn.classList.remove('active'); return; }
+  setStatus('Loading nearby bike lanes…', true);
+  try{
+    const b = map.getBounds();
+    const bbox = `${b.getSouth()},${b.getWest()},${b.getNorth()},${b.getEast()}`;
+    const query = `[out:json][timeout:20];way["highway"="cycleway"](${bbox});out geom;`;
+    const res = await fetchWithRetry('https://overpass-api.de/api/interpreter', {method:'POST', body: query}, 1, 700);
+    const data = await res.json();
+    bikeLaneLayer = L.layerGroup(data.elements.map(w =>
+      L.polyline(w.geometry.map(p => [p.lat, p.lon]), {color:'#2ecc71', weight:3, dashArray:'4,4'})
+    )).addTo(map);
+    btn.classList.add('active');
+    setStatus(`Showing ${data.elements.length} bike lane segments in this view.`);
+  }catch(e){ setStatus('Bike lane data unavailable right now.'); }
+});
+
+// ---------- Auto-reroute on deviation (#5) ----------
+let lastRerouteAt = 0;
+function distanceToRouteMeters(pos){
+  if(!routeLine) return Infinity;
+  const pts = routeLine.getLatLngs();
+  let min = Infinity;
+  for(let i=0;i<pts.length;i+=Math.max(1,Math.floor(pts.length/60))){
+    const d = haversine(pos, [pts[i].lat, pts[i].lng]) * 1000;
+    if(d < min) min = d;
+  }
+  return min;
+}
+function checkAutoReroute(pos){
+  if(!routeLine || !toCoords || waypoints.some(w=>w.coords)) return; // skip reroute for multi-stop trips
+  const now = Date.now();
+  if(now - lastRerouteAt < 20000) return;
+  if(distanceToRouteMeters(pos) > 60){
+    lastRerouteAt = now;
+    fromCoords = pos;
+    if(fromMarker){ map.removeLayer(fromMarker); }
+    fromMarker = L.marker(pos, {title:'Start'}).addTo(map);
+    handleGo(true);
+  }
+}
+
+// ---------- Export current map view as an image (#32) ----------
+// Caveat shown in the button's tooltip and repeated here: map tiles are loaded from
+// third-party servers (OSM/Esri/CARTO/etc.) that mostly don't send the CORS headers
+// html2canvas needs to read pixel data — so exports can come out with blank/gray tiles
+// depending on the browser and current map style. This is a known limitation of
+// browser-side map screenshotting, not something a single HTML file can fully fix.
+document.getElementById('exportImageBtn').addEventListener('click', async () => {
+  if(typeof html2canvas === 'undefined'){ setStatus('Image export library failed to load — check your connection.'); return; }
+  setStatus('Capturing map image… (tiles may appear blank due to browser CORS limits)', true);
+  try{
+    const canvas = await html2canvas(document.getElementById('mapWrap'), {useCORS:true, allowTaint:false});
+    const a = document.createElement('a');
+    a.href = canvas.toDataURL('image/png'); a.download = 'maporb-map.png';
+    document.body.appendChild(a); a.click(); a.remove();
+    setStatus('Map image downloaded — if tiles look blank, that\'s the CORS limitation above.');
+  }catch(e){ setStatus('Could not export the map as an image (tile CORS restrictions).'); }
+});
+
+// ---------- Print map + directions (#33) — uses the browser's own Save-as-PDF ----------
+document.getElementById('printMapBtn').addEventListener('click', () => window.print());
+
+// ---------- Contact Picker for destination (#35) — narrow support: Chrome on Android only ----------
+document.getElementById('contactsBtn').addEventListener('click', async () => {
+  if(!('contacts' in navigator && 'ContactsManager' in window)){
+    setStatus('Contact picking isn\'t supported in this browser — it only works in Chrome on Android.');
+    return;
+  }
+  try{
+    const contacts = await navigator.contacts.select(['name','address'], {multiple:false});
+    if(!contacts.length){ return; }
+    const c = contacts[0];
+    const addr = c.address && c.address[0] ? Object.values(c.address[0]).filter(Boolean).join(', ') : (c.name && c.name[0]);
+    if(!addr){ setStatus('That contact has no address to use.'); return; }
+    setStatus('Looking up contact address…', true);
+    const results = await geocode(addr);
+    if(!results.length){ setStatus(`Could not find "${addr}" on the map.`); return; }
+    const r = results[0];
+    toInput.value = r.display_name; setPoint('to', {lat:parseFloat(r.lat), lon:parseFloat(r.lon)});
+    setStatus('Destination set from contact.');
+  }catch(e){ setStatus('Contact selection was cancelled or failed.'); }
+});
+
+// ---------- Clipboard address detection (#36) ----------
+document.getElementById('clipboardBtn').addEventListener('click', async () => {
+  if(!navigator.clipboard || !navigator.clipboard.readText){ setStatus('Clipboard access isn\'t supported here.'); return; }
+  try{
+    const text = (await navigator.clipboard.readText()).trim();
+    if(!text){ setStatus('Clipboard is empty.'); return; }
+    setStatus(`Looking up "${text.slice(0,40)}"…`, true);
+    const results = await geocode(text);
+    if(!results.length){ setStatus('Could not find that clipboard text on the map.'); return; }
+    const r = results[0];
+    toInput.value = r.display_name; setPoint('to', {lat:parseFloat(r.lat), lon:parseFloat(r.lon)});
+    setStatus('Destination set from clipboard.');
+  }catch(e){ setStatus('Clipboard permission denied.'); }
+});
+
+// ---------- QR code scan for destination (#37, via jsQR — free, no key) ----------
+let qrStream = null, qrRAF = null;
+document.getElementById('qrScanBtn').addEventListener('click', async () => {
+  if(typeof jsQR === 'undefined'){ setStatus('QR scanner library failed to load — check your connection.'); return; }
+  const video = document.getElementById('camFeed');
+  const canvas = document.getElementById('camCanvas');
+  try{
+    qrStream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
+  }catch(e){ setStatus('Camera access denied or unavailable.'); return; }
+  video.srcObject = qrStream; video.style.display = 'block'; await video.play();
+  setStatus('Point the camera at a QR code…');
+  const ctx = canvas.getContext('2d');
+  function tick(){
+    if(video.readyState === video.HAVE_ENOUGH_DATA){
+      canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const code = jsQR(img.data, img.width, img.height);
+      if(code){ stopQrScan(); handleScannedText(code.data); return; }
+    }
+    qrRAF = requestAnimationFrame(tick);
+  }
+  qrRAF = requestAnimationFrame(tick);
+});
+function stopQrScan(){
+  if(qrRAF) cancelAnimationFrame(qrRAF);
+  if(qrStream) qrStream.getTracks().forEach(t => t.stop());
+  document.getElementById('camFeed').style.display = 'none';
+}
+async function handleScannedText(text){
+  setStatus('Reading QR code…', true);
+  try{
+    let lat, lon;
+    const geoMatch = text.match(/geo:([-\d.]+),([-\d.]+)/);
+    const urlMatch = text.match(/[?&](?:mlat|lat)=([-\d.]+)[^&]*[?&](?:mlon|lon|lng)=([-\d.]+)/);
+    if(geoMatch){ lat = +geoMatch[1]; lon = +geoMatch[2]; }
+    else if(urlMatch){ lat = +urlMatch[1]; lon = +urlMatch[2]; }
+    if(lat != null && !isNaN(lat)){
+      toInput.value = `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+      setPoint('to', {lat, lon});
+      setStatus('Destination set from QR code.');
+      return;
+    }
+    // otherwise treat the QR content as a plain address/URL and geocode it
+    const results = await geocode(text);
+    if(!results.length){ setStatus('QR code read, but no matching location found.'); return; }
+    const r = results[0];
+    toInput.value = r.display_name; setPoint('to', {lat:parseFloat(r.lat), lon:parseFloat(r.lon)});
+    setStatus('Destination set from QR code.');
+  }catch(e){ setStatus('Could not resolve the scanned QR code.'); }
+}
+
+// ---------- Interface language (#40) — core action labels only; full coverage is a larger effort ----------
+const uiStrings = {
+  en: {locate:'Locate', swap:'Swap', stop:'Stop', tapset:'Tap-set', favorite:'Favorite', home:'Home', work:'Work', live:'Live', recenter:'Recenter'},
+  es: {locate:'Ubicar', swap:'Cambiar', stop:'Parada', tapset:'Marcar', favorite:'Favorito', home:'Casa', work:'Trabajo', live:'En vivo', recenter:'Centrar'},
+  fr: {locate:'Localiser', swap:'Inverser', stop:'Arrêt', tapset:'Définir', favorite:'Favori', home:'Domicile', work:'Travail', live:'En direct', recenter:'Recentrer'},
+  de: {locate:'Orten', swap:'Tauschen', stop:'Stopp', tapset:'Setzen', favorite:'Favorit', home:'Zuhause', work:'Arbeit', live:'Live', recenter:'Zentrieren'},
+  hi: {locate:'स्थान', swap:'बदलें', stop:'रुकें', tapset:'सेट करें', favorite:'पसंदीदा', home:'घर', work:'कार्य', live:'लाइव', recenter:'केंद्र'}
+};
+const langOrder = ['en','es','fr','de','hi'];
+let uiLang = localStorage.getItem('maporb-lang') || 'en';
+function applyLanguage(){
+  document.getElementById('langLabel').textContent = uiLang.toUpperCase();
+  const s = uiStrings[uiLang] || uiStrings.en;
+  const map2 = {locBtn:'locate', swapBtn:'swap', addStopBtn:'stop', favBtn:'favorite', homeBtn:'home', workBtn:'work', liveBtn:'live', recenterBtn:'recenter'};
+  Object.entries(map2).forEach(([id,key]) => {
+    const btn = document.getElementById(id);
+    if(!btn) return;
+    const tbl = btn.querySelector('.tbl');
+    if(tbl) tbl.textContent = s[key];
+  });
+  fromInput.placeholder = uiLang==='en' ? 'Start (or use my location)' : s.locate;
+  toInput.placeholder = uiLang==='en' ? 'Destination' : s.work;
+}
+document.getElementById('langBtn').addEventListener('click', () => {
+  uiLang = langOrder[(langOrder.indexOf(uiLang)+1) % langOrder.length];
+  localStorage.setItem('maporb-lang', uiLang);
+  applyLanguage();
+  setStatus(uiLang === 'en' ? '' : 'Note: only core action labels are translated so far — most tool names stay in English.');
+});
+applyLanguage();
+
+// ---------- Currency for cost estimates (#41), via open.er-api.com (free, no key) ----------
+let currencyCode = localStorage.getItem('maporb-currency') || 'USD';
+document.getElementById('currencyLabel').textContent = currencyCode;
+let exchangeRates = null, exchangeBase = null;
+async function getRateTo(code){
+  if(code === 'USD'){ return 1; }
+  if(!exchangeRates || exchangeBase !== 'USD'){
+    const res = await fetchWithRetry('https://open.er-api.com/v6/latest/USD');
+    const data = await res.json();
+    exchangeRates = data.rates; exchangeBase = 'USD';
+  }
+  return exchangeRates[code] || null;
+}
+document.getElementById('currencyBtn').addEventListener('click', async () => {
+  const code = prompt('Currency code for cost estimates (e.g. USD, EUR, INR, GBP):', currencyCode);
+  if(!code) return;
+  currencyCode = code.trim().toUpperCase();
+  localStorage.setItem('maporb-currency', currencyCode);
+  document.getElementById('currencyLabel').textContent = currencyCode;
+});
+
+// ---------- Time-zone-aware ETA for cross-timezone trips (#42) ----------
+async function upgradeEtaWithDestinationTimezone(){
+  if(!toCoords || lastDurationSeconds == null) return;
+  try{
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${toCoords[0]}&longitude=${toCoords[1]}&current=temperature_2m&timezone=auto`;
+    const res = await fetchWithRetry(url);
+    const data = await res.json();
+    if(!data.timezone) return;
+    const etaDate = new Date(Date.now() + lastDurationSeconds*1000);
+    const etaLocal = new Intl.DateTimeFormat([], {hour:'2-digit', minute:'2-digit', timeZone:data.timezone}).format(etaDate);
+    const timeEl = document.getElementById('timeVal');
+    if(timeEl && timeEl.textContent.includes('ETA')){
+      timeEl.textContent = timeEl.textContent.replace(/ETA \d{1,2}:\d{2}\s*[AP]?M?/i, `ETA ${etaLocal} (destination time)`);
+    }
+  }catch(e){ /* keep the device-local ETA already shown */ }
+}
+
+// ---------- 3D tilt view (#44) — a CSS perspective tilt on the flat map, not true 3D terrain ----------
+let tilt3DOn = false;
+document.getElementById('tilt3DBtn').addEventListener('click', () => {
+  tilt3DOn = !tilt3DOn;
+  document.getElementById('tilt3DBtn').classList.toggle('active', tilt3DOn);
+  document.getElementById('map').classList.toggle('tilt-3d', tilt3DOn);
+});
+
+// ---------- AR-style compass view (#45) — camera passthrough + a heading arrow toward the
+// next turn or destination. This is a simplified compass overlay, not markerless/plane-tracking AR. ----------
+let arStream = null, arHeadingHandler = null;
+function bearingBetween(a, b){
+  const toRad = d => d*Math.PI/180, toDeg = r => r*180/Math.PI;
+  const dLon = toRad(b[1]-a[1]);
+  const y = Math.sin(dLon)*Math.cos(toRad(b[0]));
+  const x = Math.cos(toRad(a[0]))*Math.sin(toRad(b[0])) - Math.sin(toRad(a[0]))*Math.cos(toRad(b[0]))*Math.cos(dLon);
+  return (toDeg(Math.atan2(y,x))+360)%360;
+}
+document.getElementById('arBtn').addEventListener('click', async () => {
+  const target = (routeStepPoints[nextStepIdx] && [routeStepPoints[nextStepIdx].lat, routeStepPoints[nextStepIdx].lon]) || toCoords;
+  if(!target){ setStatus('Set a destination (or start navigating) first.'); return; }
+  const pos = lastKnownPos || fromCoords;
+  if(!pos){ setStatus('Need a known location — enable live tracking or 📍 first.'); return; }
+  try{
+    arStream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
+  }catch(e){ setStatus('Camera access denied.'); return; }
+  document.getElementById('arVideo').srcObject = arStream;
+  document.getElementById('arOverlay').style.display = 'block';
+  const bearing = bearingBetween(pos, target);
+  const info = document.getElementById('arInfo');
+  info.textContent = `Heading toward ${Math.round(bearing)}° — turn until the arrow points up`;
+  arHeadingHandler = (e) => {
+    const heading = e.webkitCompassHeading != null ? e.webkitCompassHeading : (360 - e.alpha);
+    if(heading == null || isNaN(heading)) return;
+    const rel = (bearing - heading + 360) % 360;
+    document.getElementById('arArrow').style.transform = `translate(-50%,-50%) rotate(${rel}deg)`;
+  };
+  if(typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function'){
+    try{ await DeviceOrientationEvent.requestPermission(); }catch(e){}
+  }
+  window.addEventListener('deviceorientationabsolute', arHeadingHandler);
+  window.addEventListener('deviceorientation', arHeadingHandler);
+});
+document.getElementById('arCloseBtn').addEventListener('click', () => {
+  document.getElementById('arOverlay').style.display = 'none';
+  if(arStream) arStream.getTracks().forEach(t => t.stop());
+  if(arHeadingHandler){
+    window.removeEventListener('deviceorientationabsolute', arHeadingHandler);
+    window.removeEventListener('deviceorientation', arHeadingHandler);
+  }
+});
+
+// ---------- Offline app-shell + tile caching via Service Worker ----------
+// Registers ./sw.js (ships alongside this file). Falls back silently if the
+// hosting environment blocks Service Workers (e.g. some sandboxed previews) —
+// the app still works fully online either way.
+if('serviceWorker' in navigator){
+  try{
+    navigator.serviceWorker.register('sw.js').catch(() => { /* offline caching unavailable in this environment */ });
+  }catch(e){ /* some sandboxed/preview contexts throw synchronously rather than rejecting — app still works fully online */ }
+}
+</script>
+</body>
+</html>
